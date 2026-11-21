@@ -1,0 +1,4 @@
+.env
+data/
+release.json
+node_modules/

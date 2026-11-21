@@ -1,0 +1,544 @@
+import {createServer} from 'node:http';
+import {createHash,randomBytes,randomUUID,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from 'node:crypto';
+import {existsSync,mkdirSync,readFileSync} from 'node:fs';
+import {dirname} from 'node:path';
+import {promisify} from 'node:util';
+import {openDatabase,atomic} from './db.js';
+import {services,listed,getService,evaluate} from './services.js';
+import {pitch,cases,site} from './marketing.js';
+import {CONSUMO,ENVIO,VUELO} from './reclamos.js';
+import {matchesPayment,mp,validSignature} from './payments.js';
+import {sources} from './sources.js';
+import {pdf} from './pdf.js';
+
+const env=process.env;
+const origin=new URL(env.PUBLIC_ORIGIN||'http://localhost:3000').origin;
+const secure=origin.startsWith('https:');
+const live=env.MP_MODE==='live';
+const token=env.MP_ACCESS_TOKEN;
+const mode=live?'live':'test';
+const adminEmail=env.ADMIN_EMAIL?.toLowerCase();
+const release=env.RELEASE_FILE?JSON.parse(readFileSync(env.RELEASE_FILE,'utf8')):{};
+const legacyDbPath='data/resolveya.sqlite';
+const dbPath=env.DB_PATH||(existsSync(legacyDbPath)?legacyDbPath:'data/gestion-clara.sqlite');
+if(env.DATA_KEY&&!/^[a-f0-9]{64}$/i.test(env.DATA_KEY)) throw Error('DATA_KEY debe contener 64 caracteres hexadecimales');
+const key=env.DATA_KEY?Buffer.from(env.DATA_KEY,'hex'):null;
+const retention=Number(env.RETENTION_DAYS||0);
+if(env.RETENTION_DAYS&&!(Number.isInteger(retention)&&retention>=30)) throw Error('RETENTION_DAYS debe ser un entero de 30 o más.');
+if(live&&(!secure||!key||!token||!env.MP_WEBHOOK_SECRET||!env.MP_COLLECTOR_ID||!release.policyVersion||!release.terms||!release.privacy||!release.business||!release.support||!env.RESEND_KEY||!env.MAIL_FROM)) throw Error('Configuración comercial incompleta. Consultá README.md.');
+if(dbPath!==':memory:') mkdirSync(dirname(dbPath),{recursive:true,mode:0o700});
+process.umask(0o077);
+const db=openDatabase(dbPath);
+db.exec(`CREATE TABLE IF NOT EXISTS deliveries(order_id TEXT PRIMARY KEY REFERENCES orders(id),attempts INTEGER DEFAULT 0,next INTEGER DEFAULT 0,state TEXT DEFAULT 'pending');`);
+const sql=(query,...args)=>db.prepare(query).run(...args);
+const one=(query,...args)=>db.prepare(query).get(...args);
+const all=(query,...args)=>db.prepare(query).all(...args);
+const time=()=>new Date().toISOString();
+const hash=text=>createHash('sha256').update(text).digest('hex');
+const adapt=promisify(scrypt);
+const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ars=cents=>new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS'}).format(cents/100);
+const pathFor=s=>'/servicios/'+s.slug;
+const policy=release.policyVersion||'local-v1';
+const failures=new Map();
+const statuses={pending:'Pendiente de pago',ready:'Informe disponible',refunded:'Devuelto',disputed:'Pago en revisión'};
+const price=s=>{
+  const entry=release.products?.[s.slug];
+  if(!s.sellable||!token||!env.MP_COLLECTOR_ID||!env.MP_WEBHOOK_SECRET||!secure||!key) return 0;
+  if(!Number.isSafeInteger(entry?.cents)||entry.cents<100||entry.cents>100000000) return 0;
+  if(live&&(entry.version!==s.version||!entry.approval||!entry.approvedBy)) return 0;
+  return entry.cents;
+};
+const event=(kind,slug,id=randomUUID(),source=null)=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source) VALUES (?,?,?,?,?)',id,kind,slug,time(),source);
+const sourceOf=value=>value==='ficha'||cases.some(c=>c.path===value)?value:'ficha';
+function seal(value) {
+  if(!key) return Buffer.concat([Buffer.from('0'),Buffer.from(value)]);
+  const nonce=randomBytes(12);
+  const cipher=createCipheriv('aes-256-gcm',key,nonce);
+  const bytes=Buffer.concat([cipher.update(value),cipher.final()]);
+  return Buffer.concat([Buffer.from('1'),nonce,cipher.getAuthTag(),bytes]);
+}
+function unseal(value) {
+  const bytes=Buffer.from(value);
+  if(bytes[0]===48&&!live) return bytes.subarray(1);
+  if(bytes[0]!==49||!key) throw Error('Datos cifrados sin clave');
+  const decipher=createDecipheriv('aes-256-gcm',key,bytes.subarray(1,13));
+  decipher.setAuthTag(bytes.subarray(13,29));
+  return Buffer.concat([decipher.update(bytes.subarray(29)),decipher.final()]);
+}
+async function password(value,salt=randomBytes(16).toString('hex')) {
+  return salt+':'+(await adapt(value,salt,64)).toString('hex');
+}
+function identity(req) {
+  const raw=req.headers.cookie?.match(/(?:^|;\s*)ry=([a-f0-9]{64})(?:;|$)/)?.[1];
+  return raw?one('SELECT users.*,sessions.token FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token=? AND expires>?',hash(raw),Date.now()):null;
+}
+const cookie=(value,age)=>`ry=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${age}${secure?'; Secure':''}`;
+const admin=user=>Boolean(user&&one('SELECT 1 FROM admins WHERE user_id=?',user.id));
+const link=(href,label)=>`<a class="button" href="${esc(href)}">${esc(label)}</a>`;
+const post=(url,inner)=>`<form method="post" action="${esc(url)}">${inner}</form>`;
+const button=label=>`<button type="submit">${esc(label)}</button>`;
+function page(res, title, body, {user,status=200,canonical,description='Armá tu reclamo a una empresa, un envío o una aerolínea con la normativa argentina que aplica.',jsonld}={}) {
+  res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':canonical&&!user?'public, max-age=60':'private, no-store','Vary':'Cookie'});
+  res.end(`<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)} · Categoría Clara</title><meta name="description" content="${esc(description)}">${canonical?`<link rel="canonical" href="${esc(origin+canonical)}"><meta property="og:title" content="${esc(title+' · Categoría Clara')}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(origin+canonical)}"><meta property="og:type" content="website"><meta property="og:locale" content="es_AR"><meta property="og:site_name" content="Categoría Clara"><meta property="og:image" content="${esc(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">${jsonld?`<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g,'\\u003c')}</script>`:''}`:'<meta name="robots" content="noindex,nofollow">'}<link rel="stylesheet" href="/style.css"><script defer src="/site.js"></script></head>
+  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a>${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}</nav></header>
+  <main>${body}</main><footer><span>Categoría Clara · ${esc(release.business||'Plataforma independiente')}${release.cuit?' · CUIT '+esc(release.cuit):''}${release.address?' · '+esc(release.address):''}</span><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a>${release.support?`<a href="mailto:${esc(release.support)}">Soporte</a>`:''}</footer></body></html>`);
+}
+function plain(res,code,message,type='text/plain; charset=utf-8') {
+  res.writeHead(code,{'Content-Type':type}); res.end(message);
+}
+function redirect(res,location) {res.writeHead(303,{Location:location,'Cache-Control':'no-store'});res.end();}
+function fail(status,message) {throw Object.assign(Error(message),{status});}
+async function form(req) {
+  if(req.headers.origin!==origin || !req.headers['content-type']?.startsWith('application/x-www-form-urlencoded')) fail(403,'Solicitud de formulario inválida.');
+  const chunks=[];let size=0;
+  for await(const chunk of req) {size+=chunk.length;if(size>16384) fail(413,'Formulario demasiado extenso.');chunks.push(chunk);}
+  return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));
+}
+function limit(req,route,max) {
+  const address=env.TRUST_PROXY==='1'?req.headers['x-real-ip']||req.socket.remoteAddress:req.socket.remoteAddress;
+  const id=route+':'+address;
+  const now=Date.now();
+  const row=failures.get(id)??{reset:0,hits:0};
+  if(row.reset<now){row.hits=0;row.reset=now+600000;}
+  row.hits++;
+  failures.set(id,row);
+  if(row.hits>max) fail(429,'Demasiados intentos. Probá más tarde.');
+}
+setInterval(()=>{for(const [id,row] of failures) if(row.reset<Date.now()) failures.delete(id);},600000).unref();
+const resultLines=(service,lines,id)=>[
+  `Servicio: ${service.name} · Motor ${service.version}`,
+  `Referencia: ${id} · ${time().slice(0,10)} UTC`,
+  'Informe privado basado en datos ingresados por el cliente.',
+  service.description,'',...lines
+];
+function acceptPayment(payment, order) {
+  atomic(db,()=>{
+    const current=one('SELECT * FROM orders WHERE id=?',order.id);
+    const paymentId=String(payment.id);
+    const old=one('SELECT * FROM payments WHERE id=?',paymentId);
+    if(old&&old.order_id!==order.id) return;
+    if(old&&['refunded','charged_back'].includes(old.status)&&payment.status==='approved') return;
+    sql('INSERT INTO payments VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status',paymentId,order.id,payment.status);
+    const partial=Number(payment.transaction_amount_refunded||0)>0;
+    if(payment.status==='approved'&&!partial&&current.state==='pending'&&!current.purged_at){
+      const {title,lines}=JSON.parse(unseal(current.result));
+      const report=pdf(title,lines);
+      sql('INSERT INTO reports VALUES (?,?,?)',order.id,seal(report),time());
+      sql("UPDATE orders SET state='ready', approved_payment=? WHERE id=?",paymentId,order.id);
+      sql('INSERT INTO deliveries(order_id) VALUES (?)',order.id);
+      event('purchase',order.slug,'purchase:'+order.id,order.source);
+      event('report_delivered',order.slug,'report:'+order.id,order.source);
+    }
+    const next=payment.status==='refunded'?'refunded':
+      partial||['charged_back','in_mediation'].includes(payment.status)?'disputed':null;
+    if(!next&&payment.status==='approved'&&current.state==='disputed'&&current.approved_payment===paymentId){
+      sql("UPDATE orders SET state='ready' WHERE id=?",order.id);
+      sql("UPDATE deliveries SET state='pending' WHERE order_id=? AND state='held'",order.id);
+    }
+    if(next&&current.approved_payment===paymentId&&current.state!==next){
+      sql('UPDATE orders SET state=? WHERE id=?',next,order.id);
+      sql("UPDATE deliveries SET state='held' WHERE order_id=? AND state!='sent'",order.id);
+      event(next,order.slug,next+':'+order.id);
+    }
+  });
+}
+async function reconcile(paymentId) {
+  if(!/^\d{1,24}$/.test(paymentId)||!token||!env.MP_COLLECTOR_ID) throw Error('Configuración o ID inválido');
+  const payment=await mp(token,'/v1/payments/'+paymentId);
+  if(String(payment.id)!==paymentId) throw Error('Referencia inválida');
+  const order=one('SELECT * FROM orders WHERE id=?',String(payment.external_reference));
+  if(!order||order.mode!==mode||!matchesPayment(payment,order,env.MP_COLLECTOR_ID,live)) return false;
+  acceptPayment(payment,order);
+  return true;
+}
+function sendMail(to,subject,text,id) {
+  const headers={Authorization:'Bearer '+env.RESEND_KEY,'Content-Type':'application/json'};
+  if(id) headers['Idempotency-Key']=id;
+  return fetch('https://api.resend.com/emails',{method:'POST',signal:AbortSignal.timeout(10000),redirect:'error',headers,
+    body:JSON.stringify({from:env.MAIL_FROM,to:[to],subject,text})});
+}
+async function mailLink(to,subject,text,url,id) {
+  if(env.RESEND_KEY&&env.MAIL_FROM){
+    const response=await sendMail(to,subject,text+'\n\n'+url,id);
+    if(!response.ok) throw Error('mail '+response.status);
+    return;
+  }
+  if(live) throw Error('Correo no configurado');
+  console.log(`[desarrollo] ${subject}: ${url}`);
+}
+function purge() {
+  if(!retention) return 0;
+  const cutoff=new Date(Date.now()-retention*86400000).toISOString();
+  const old=all('SELECT id FROM orders WHERE created<? AND purged_at IS NULL',cutoff);
+  for(const {id} of old) atomic(db,()=>{
+    sql('DELETE FROM reports WHERE order_id=?',id);
+    sql('UPDATE orders SET result=?, purged_at=? WHERE id=?',seal(JSON.stringify({title:'',lines:[]})),time(),id);
+  });
+  return old.length;
+}
+const CATALOGS={'consumo-defensa':CONSUMO,'envio-reclamo':ENVIO,'vuelo-reclamo':VUELO};
+let delivering=false;
+async function deliver() {
+  if(delivering||!env.RESEND_KEY||!env.MAIL_FROM) return;
+  delivering=true;
+  try {
+    const job=one(`SELECT d.*,u.email,o.access_sealed FROM deliveries d JOIN orders o ON o.id=d.order_id JOIN users u ON u.id=o.user_id WHERE d.state='pending' AND d.next<=? AND o.state='ready' AND o.mode='live' ORDER BY d.next LIMIT 1`,Date.now());
+    if(!job) return;
+    try {
+      const response=await sendMail(job.email,'Tu informe de Categoría Clara está listo',
+        'Tu informe está listo. Descargalo desde este enlace privado (no lo compartas): '+origin+'/p/'+unseal(job.access_sealed).toString(),'report-'+job.order_id);
+      if(!response.ok) throw Error('mail '+response.status);
+      sql("UPDATE deliveries SET state='sent' WHERE order_id=?",job.order_id);
+    } catch {
+      sql("UPDATE deliveries SET attempts=attempts+1, next=?, state=CASE WHEN attempts>=4 THEN 'failed' ELSE state END WHERE order_id=?",Date.now()+60000*2**job.attempts,job.order_id);
+    }
+  } finally {delivering=false;}
+}
+setInterval(()=>deliver().catch(()=>console.error('Error en cola de correo')),15000).unref();
+if(!process.argv[2]) setInterval(()=>{try {purge();} catch {console.error('Error en la depuración');}},3600000).unref();
+function noteBlock(order) {
+  let lines;
+  try {lines=JSON.parse(unseal(order.result)).lines;} catch {return '';}
+  const start=lines.findIndex(line=>/^--- NOTA DE RECLAMO/.test(line));
+  if(start<0) return '';
+  const end=lines.findIndex((line,i)=>i>start&&/^--- /.test(line));
+  const note=lines.slice(start+1,end<0?undefined:end).filter(line=>!/^(Atención|Plazos de protesta|En vuelos de cabotaje)/.test(line)).join('\n');
+  return `<section class="panel"><h2>Texto de la nota</h2><p class="muted small">Copialo para pegarlo en un mail o en el formulario de reclamos de la empresa. Completá tus datos donde dice [Tu nombre...].</p><pre class="note" id="nota">${esc(note)}</pre><button type="button" data-copy="#nota">Copiar nota</button></section>`;
+}
+async function startCheckout(order,secret) {
+  const currentService=getService(order.slug);
+  if(order.state!=='pending'||order.mode!==mode||order.policy!==policy||order.version!==currentService?.version||!price(currentService)) fail(409,'El pedido no admite un pago en este momento.');
+  if(Date.parse(order.created)+86400000<=Date.now()) fail(409,'El plazo para pagar este pedido venció. Volvé a armar el reclamo.');
+  if(order.preference) return order.preference;
+  const attempt=sql('INSERT OR IGNORE INTO checkout_attempts VALUES (?,?)',order.id,time());
+  if(!attempt.changes) fail(409,'El inicio del pago está pendiente de confirmación. Contactá a soporte con la referencia de tu pedido.');
+  try {
+    const back=origin+'/p/'+secret;
+    const result=await mp(token,'/checkout/preferences',{
+      items:[{id:order.slug,title:currentService.name,quantity:1,currency_id:'ARS',unit_price:order.cents/100}],
+      external_reference:order.id,back_urls:{success:back,pending:back,failure:back},auto_return:'approved',
+      expires:true,expiration_date_to:new Date(Date.parse(order.created)+86400000).toISOString()
+    });
+    const destination=new URL(live?result.init_point:result.sandbox_init_point);
+    if(destination.protocol!=='https:'||!['www.mercadopago.com.ar','sandbox.mercadopago.com.ar','www.mercadopago.com','sandbox.mercadopago.com'].includes(destination.hostname)) throw Error('Destino inválido');
+    atomic(db,()=>{
+      sql('UPDATE orders SET preference=? WHERE id=?',destination.href,order.id);
+      event('begin_checkout',order.slug,'checkout:'+order.id,order.source);
+    });
+    return destination.href;
+  } catch(error) {
+    if([400,401,403,422].includes(error.providerStatus)){
+      sql('DELETE FROM checkout_attempts WHERE order_id=?',order.id);
+      fail(502,'Mercado Pago rechazó la solicitud. Probá nuevamente o contactá a soporte.');
+    }
+    fail(502,'Mercado Pago no confirmó el inicio del pago. Contactá a soporte con la referencia de tu pedido.');
+  }
+}
+const validEmail=email=>/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)&&email.length<=254;
+function customer(email) {
+  let account=one('SELECT * FROM users WHERE email=?',email);
+  if(!account){
+    sql('INSERT OR IGNORE INTO users VALUES (?,?,?)',randomUUID(),email,'!');
+    account=one('SELECT * FROM users WHERE email=?',email);
+  }
+  sql('INSERT INTO policy_reads VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET version=excluded.version, created=excluded.created',account.id,policy,time());
+  return account;
+}
+const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'America/Argentina/Cordoba'}).format(new Date());
+const checks=items=>`<ul class="checks">${items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`;
+const stepsHtml=info=>`<section class="block"><h2>Cómo funciona</h2><ol class="steps">${info.steps.map(([title,text])=>`<li><strong>${esc(title)}</strong><span>${esc(text)}</span></li>`).join('')}</ol></section>`;
+const faqHtml=info=>`<section class="block"><h2>Preguntas frecuentes</h2><div class="faq">${info.faq.map(([q,a])=>`<details><summary>${esc(q)}</summary><p>${esc(a)}</p></details>`).join('')}</div></section>`;
+const mock=(s,info)=>`<div class="mock" aria-hidden="true"><div class="mock-band"><span>Categoría Clara</span><strong>${esc(s.name)}</strong></div><div class="mock-body">${info.mock.map(label=>`<b>${esc(label)}</b><i></i><i class="short"></i>`).join('')}</div></div>`;
+const faqLd=info=>({'@context':'https://schema.org','@type':'FAQPage',mainEntity:info.faq.map(([q,a])=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:a}}))});
+const caseUrl=c=>(['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(c.service)?'/reclamos/':'/guias/')+c.path;
+const visibleCases=()=>cases.filter(c=>listed.some(s=>s.slug===c.service));
+const serviceLd=(name,description,path,cents)=>({'@context':'https://schema.org','@type':'Service',name,description,url:origin+path,areaServed:{'@type':'Country',name:'Argentina'},provider:{'@type':'Organization',name:release.business||'Categoría Clara'},...(cents?{offers:{'@type':'Offer',price:(cents/100).toFixed(2),priceCurrency:'ARS'}}:{})});
+const casesOf=s=>s.fields.find(f=>f.key==='tipo')?.options.map(o=>o.label)??[];
+function fieldHtml(f,value='',placeholder='') {
+  const ph=placeholder?` placeholder="${esc(placeholder)}"`:'';
+  let control;
+  if(f.type==='select') control=`<select name="${f.key}" required><option value="">Elegí una opción</option>${f.options.map(o=>`<option value="${esc(o.value)}"${o.value===value?' selected':''}>${esc(o.label)}</option>`).join('')}</select>`;
+  else if(f.type==='textarea') control=`<textarea name="${f.key}" maxlength="2400" required${ph}>${esc(value)}</textarea>`;
+  else if(f.type==='number') control=`<input name="${f.key}" type="number" ${f.key==='plazo'?'min="1" max="30" step="1"':'min="0" max="999999999999.99" step="0.01"'} value="${esc(value)}" required${ph}>`;
+  else control=`<input name="${f.key}" type="${f.type}" ${f.type==='text'?'maxlength="120"':''} value="${esc(value)}" required${ph}>`;
+  return `<label>${esc(f.label)}${control}</label>`;
+}
+function renderLines(lines) {
+  let html='',list=null;
+  const close=()=>{if(list){html+=`</${list}>`;list=null;}};
+  for(const line of lines){
+    const heading=line.match(/^--- (.+?) ---$/);
+    if(heading){close();html+=`<h3>${esc(heading[1])}</h3>`;continue;}
+    const bullet=line.match(/^- (.*)$/);
+    if(bullet){if(list!=='ul'){close();html+='<ul>';list='ul';}html+=`<li>${esc(bullet[1])}</li>`;continue;}
+    const item=line.match(/^\d+\. (.*)$/);
+    if(item){if(list!=='ol'){close();html+='<ol>';list='ol';}html+=`<li>${esc(item[1])}</li>`;continue;}
+    close();
+    const pair=line.match(/^(Fecha|Para|Asunto|De|Hechos|Solicito|Firma):\s?(.*)$/);
+    html+=pair?`<p><strong>${esc(pair[1])}:</strong> ${esc(pair[2])}</p>`:`<p>${esc(line)}</p>`;
+  }
+  close();
+  return html;
+}
+function summary(lines) {
+  const get=prefix=>lines.find(line=>line.startsWith(prefix))?.slice(prefix.length).trim()??'';
+  const counts={normas:0,pruebas:0,pasos:0,avisos:0};
+  let section='';
+  for(const line of lines){
+    const heading=line.match(/^--- (.+?) ---$/);
+    if(heading){section=heading[1];continue;}
+    if(line.startsWith('- ')) counts.normas++;
+    else if(/^\d+\. /.test(line)){if(section.startsWith('PRUEBAS')) counts.pruebas++; else if(section.startsWith('PRÓXIMOS')) counts.pasos++;}
+    else if(/^(Atención|Plazos de protesta|En vuelos de cabotaje)/.test(line)) counts.avisos++;
+  }
+  return {para:get('Para:'),asunto:get('Asunto:'),limite:lines.join(' ').match(/hasta el (\d{2}\/\d{2}\/\d{4})/)?.[1]??'',...counts};
+}
+const table=(columns,rows)=>`<div class="table"><table><thead><tr>${columns.map(label=>`<th scope="col">${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+const authFields=`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" minlength="12" maxlength="128" required></label>`;
+async function route(req,res) {
+  const url=new URL(req.url,origin);
+  const path=url.pathname;
+  const method=req.method;
+  if(!['GET','POST'].includes(method)) return plain(res,405,'Método no permitido');
+  if(method==='POST'&&path==='/webhooks/mercadopago'){
+    const paymentId=url.searchParams.get('data.id');
+    if(!validSignature(env.MP_WEBHOOK_SECRET,paymentId,req.headers)) return plain(res,401,'Firma inválida');
+    if(url.searchParams.has('type')&&url.searchParams.get('type')!=='payment') return plain(res,200,'Evento fuera de alcance');
+    try {await reconcile(paymentId);return plain(res,200,'Recibido');}
+    catch {return plain(res,503,'Reintentar más tarde');}
+  }
+  if(method==='GET'&&path==='/og.png') {res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(new URL('./public/og.png',import.meta.url)));}
+  if(method==='GET'&&['/style.css','/site.js'].includes(path)) return plain(res,200,readFileSync(new URL('./public'+path,import.meta.url)),path.endsWith('css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8');
+  const user=identity(req);
+  const show=(title,body,options)=>page(res,title,body,{user,...options});
+  if(method==='GET'&&path==='/health') return plain(res,200,'ok');
+  if(method==='GET'&&path==='/robots.txt') return plain(res,200,env.INDEX_PUBLIC==='1'?`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /pedido/\nSitemap: ${origin}/sitemap.xml\n`:'User-agent: *\nDisallow: /\n');
+  if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/',...listed.map(pathFor),...visibleCases().map(caseUrl)].map(path=>`<url><loc>${esc(origin+path)}</loc></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
+  if(method==='GET'&&path==='/'){
+    const main=getService(site.service)&&listed.includes(getService(site.service))?getService(site.service):listed[0];
+    const info=pitch[main.slug];
+    const cards=listed.length>1?`<section id="servicios" class="block"><h2>Elegí tu caso</h2><div class="grid three">${listed.map(s=>{const p=pitch[s.slug];const cents=price(s);return `<article class="card" data-card><h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p>${cents?`<p class="price-sm">${ars(cents)}</p>`:''}<a class="button" href="${pathFor(s)}">Empezar</a></article>`;}).join('')}</div></section>`:'';
+    const guides=visibleCases();
+    return show(site.title,`<section class="hero"><p class="eyebrow">${esc(site.eyebrow)}</p><h1>${esc(site.title)}</h1><p>${esc(site.lead)}</p>${link(pathFor(main),site.cta)}<ul class="trust">${site.trust.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></section>
+    ${cards}${guides.length?`<section class="block"><h2>Guías rápidas</h2><div class="case-links">${listed.map(s=>`<div><h3>${esc(pitch[s.slug].title)}</h3><ul>${guides.filter(c=>c.service===s.slug).map(c=>`<li><a href="${caseUrl(c)}">${esc(c.title)}</a></li>`).join('')}</ul></div>`).join('')}</div></section>`:''}
+    ${stepsHtml(info)}
+    <section class="block split"><div><h2>Qué incluye tu informe</h2>${checks(info.includes)}</div>${mock(main,info)}</section>
+    ${faqHtml(info)}`,{canonical:'/',description:site.description,jsonld:[faqLd(info)]});
+  }
+  const service=listed.find(s=>s.slug===path.match(/^\/servicios\/([a-z-]+)$/)?.[1]);
+  if(service){
+    const s=service;
+    const [sourceName,sourceUrl]=sources[s.slug];
+    const cents=price(s);
+    const info=pitch[s.slug];
+    if(method==='POST'){
+      limit(req,'service',50);
+      const values=await form(req);
+      let result;
+      try {result=evaluate(s,values);} catch(error){fail(422,error.message);}
+      const origen=sourceOf(values.origen);
+      if(values.action!=='order') event('preview',s.slug,undefined,origen);
+      if(values.action==='order'){
+        if(!cents||values.consent!==policy) fail(409,'La compra no está habilitada o falta aceptar las condiciones.');
+        const email=String(values.email||'').trim().toLowerCase();
+        if(!validEmail(email)) fail(422,'Revisá el correo.');
+        if(email!==String(values.email2||'').trim().toLowerCase()) fail(422,'Los dos correos no coinciden.');
+        if(email===adminEmail) fail(409,'Usá otro correo para comprar.');
+        const account=customer(email);
+        const id=randomUUID();
+        const secret=randomBytes(32).toString('hex');
+        const document={title:'Categoría Clara · '+s.name,lines:resultLines(s,result.lines,id)};
+        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,cents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen);
+        try {return redirect(res,await startCheckout(one('SELECT * FROM orders WHERE id=?',id),secret));}
+        catch {return redirect(res,'/p/'+secret);}
+      }
+      if(!cents) return show(info.title,`<a href="${path}">Volver al formulario</a><h1>${esc(info.title)}</h1><section class="panel result">${renderLines(result.lines)}</section>`);
+      const preview=s.teaser?s.teaser(result.lines):(()=>{const f=summary(result.lines);return {facts:[['Para',f.para],['Asunto','Reclamo por '+f.asunto.replace(/^Reclamo por /,'')],['Respuesta hasta',f.limite]],includes:['Nota formal lista para firmar y enviar',`${f.normas} referencias normativas para tu caso`,`${f.pruebas} pruebas para adjuntar`,`${f.pasos} próximos pasos, incluido a qué organismo escalarlo`,...(f.avisos?['Aviso sobre plazos importantes de tu caso']:[])]};})();
+      const hidden=s.fields.map(f=>`<input type="hidden" name="${f.key}" value="${esc(values[f.key])}">`).join('')+`<input type="hidden" name="origen" value="${esc(origen)}">`;
+      const buy=post(path,hidden+`<label>Tu correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Repetí tu correo<input name="email2" type="email" autocomplete="email" maxlength="254" required></label>${release.withdrawalNotice?`<p class="muted small">${esc(release.withdrawalNotice)}</p>`:''}<label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button name="action" value="order">Pagar y descargar</button>`);
+      return show(info.title,`<a href="${path}">Editar los datos</a><h1>${s.teaser?'Tu resultado':'Tu reclamo está listo'}</h1><div class="svc-grid"><section class="panel"><h2>Vista previa</h2><dl class="facts">${preview.facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+        <h3>${s.teaser?'El informe completo incluye':'El PDF completo incluye'}</h3>${checks(preview.includes)}
+        <div class="locked" aria-hidden="true"><i></i><i></i><i class="short"></i><i></i><i class="short"></i></div></section>
+        <aside class="panel aside buy"><p class="price">${ars(cents)}</p><p class="muted">Pago único con Mercado Pago${live?'':' (ambiente de prueba)'}. Sin crear cuenta: descargás el PDF apenas se acredita y te llega el enlace por correo.</p>${buy}</aside></div>`);
+    }
+    event('view_item',s.slug,undefined,'ficha');
+    const defaults={envio:today(),plazo:'10'};
+    return show(info.title,`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">${esc(s.name)}</p><h1>${esc(info.title)}</h1><p class="lead">${esc(info.tagline)}</p></div>
+    <div class="svc-grid"><section class="panel"><h2>${s.teaser?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${s.teaser?'No te pedimos clave fiscal ni datos personales. Usá montos en pesos, sin puntos de miles.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
+    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(s.teaser?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}</section>
+    <aside class="panel aside"><h2>Qué recibís</h2>${checks(info.includes)}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves la vista previa gratis y pagás solo si querés el PDF.</p>`:''}${mock(s,info)}<p class="muted small">Fuente: <a href="${esc(sourceUrl)}">${esc(sourceName)}</a></p></aside></div>
+    ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:info.tagline,jsonld:[serviceLd(info.title,info.tagline,path,cents),faqLd(info)]});
+  }
+  const caseRoute=path.match(/^\/(?:reclamos|guias)\/([a-z0-9-]+)$/);
+  const landing=caseRoute&&cases.find(c=>c.path===caseRoute[1]&&caseUrl(c)===path);
+  if(landing&&method==='GET'&&listed.some(x=>x.slug===landing.service)){
+    const s=listed.find(x=>x.slug===landing.service);
+    const info=pitch[s.slug];
+    const cents=price(s);
+    const caso=landing.tipo&&CATALOGS[s.slug]?.[landing.tipo];
+    const aside=caso?`<h2>Qué dice la normativa</h2>${checks([...caso.normas,...(caso.internacional?[caso.internacional]:[])])}<h3>Qué podés pedir</h3><p>${esc(caso.opciones.charAt(0).toUpperCase()+caso.opciones.slice(1))}.</p><h3>Pruebas para juntar</h3>${checks(caso.pruebas)}`
+      :`<h2>Lo que tenés que saber</h2>${checks(landing.points||[])}<h3>El informe completo incluye</h3>${checks(info.includes)}`;
+    event('view_item',s.slug,undefined,landing.path);
+    const defaults={...(landing.tipo?{tipo:landing.tipo}:{}),envio:today(),plazo:'10'};
+    return show(landing.title,`<div class="svc-head"><a href="/">Inicio</a> · <a href="${pathFor(s)}">${esc(info.title)}</a><h1>${esc(landing.title)}</h1><p class="lead">${esc(landing.intro)}</p></div>
+    <div class="svc-grid"><section class="panel"><h2>${caso?'Armá tu reclamo':'Calculá tu caso'}</h2><p class="muted">${caso?'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.':'No te pedimos clave fiscal ni datos personales.'}</p>
+    ${post(pathFor(s),`<input type="hidden" name="origen" value="${esc(landing.path)}">`+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?'Ver resultado gratis':'Ver resultado'}</button>`)}</section>
+    <aside class="panel aside">${aside}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves el resultado gratis y pagás solo si querés el informe completo.</p>`:''}</aside></div>
+    ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:landing.intro,jsonld:[serviceLd(landing.title,landing.intro,path,cents),faqLd(info)]});
+  }
+  if(method==='POST'&&path==='/eventos/inicio'){
+    limit(req,'beacon',120);
+    const chunks=[];let size=0;
+    for await(const chunk of req){size+=chunk.length;if(size>1024) return plain(res,413,'');chunks.push(chunk);}
+    const values=Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));
+    if(listed.some(x=>x.slug===values.slug)) event('start_form',values.slug,undefined,sourceOf(values.origen));
+    return plain(res,204,'');
+  }
+  if(path==='/mis-reclamos'){
+    if(method==='GET') return show('Mis informes',`<h1>Mis informes</h1><section class="panel"><p>Ingresá el correo que usaste al comprar y te reenviamos los enlaces de tus compras.</p>${post('/mis-reclamos','<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label>'+button('Reenviar mis enlaces'))}</section>`);
+    limit(req,'links',5);
+    const input=await form(req);
+    const account=one('SELECT * FROM users WHERE email=?',String(input.email||'').trim().toLowerCase());
+    if(account&&!admin(account)){
+      const orders=all("SELECT * FROM orders WHERE user_id=? AND purged_at IS NULL AND access_sealed IS NOT NULL ORDER BY created DESC LIMIT 20",account.id);
+      if(orders.length){
+        const lines=orders.map(o=>`${getService(o.slug)?.name||o.slug} (${o.created.slice(0,10)}, ${statuses[o.state]}): ${origin}/p/${unseal(o.access_sealed).toString()}`);
+        try {await mailLink(account.email,'Tus compras en Categoría Clara','Estos son los enlaces privados de tus compras. No los compartas.',lines.join('\n'));}
+        catch {console.error('Error al reenviar enlaces');}
+      }
+    }
+    return show('Revisá tu correo','<h1>Revisá tu correo</h1><section class="panel"><p>Si hay compras con ese correo, te enviamos sus enlaces.</p></section>');
+  }
+  if(method==='POST'&&path==='/admin/ingresar'){
+    limit(req,'identity',12);
+    const input=await form(req);
+    const email=String(input.email||'').trim().toLowerCase();
+    const account=one('SELECT * FROM users WHERE email=?',email);
+    const stored=account&&admin(account)?account.password:'0'.repeat(32)+':'+'0'.repeat(128);
+    const candidate=await password(String(input.password||'').slice(0,128),stored.split(':')[0]);
+    if(stored.length!==candidate.length||!timingSafeEqual(Buffer.from(stored),Buffer.from(candidate))||!account||!admin(account)) fail(401,'Correo o contraseña incorrectos.');
+    const session=randomBytes(32).toString('hex');
+    sql('DELETE FROM sessions WHERE expires<=?',Date.now());
+    sql('INSERT INTO sessions VALUES (?,?,?)',hash(session),account.id,Date.now()+86400000);
+    res.setHeader('Set-Cookie',cookie(session,86400));
+    return redirect(res,'/admin');
+  }
+  if(method==='POST'&&path==='/salir'){
+    await form(req);
+    if(user) sql('DELETE FROM sessions WHERE token=?',user.token);
+    res.setHeader('Set-Cookie',cookie('',0));
+    return redirect(res,'/');
+  }
+  const orderRoute=path.match(/^\/p\/([a-f0-9]{64})(\/pdf|\/checkout)?$/);
+  if(orderRoute){
+    const secret=orderRoute[1];
+    const order=one('SELECT * FROM orders WHERE access_digest=?',hash(secret));
+    if(!order) fail(404,'No encontramos esa compra. Revisá el enlace o pedilo de nuevo desde «Mis informes».');
+    const subpath=orderRoute[2];
+    const self='/p/'+secret;
+    if(method==='GET'&&subpath==='/pdf'){
+      if(order.purged_at) fail(410,'El contenido de este pedido se eliminó por la política de conservación de datos.');
+      if(order.state!=='ready') fail(409,'El PDF todavía no está disponible.');
+      const report=one('SELECT body FROM reports WHERE order_id=?',order.id);
+      sql('UPDATE orders SET accessed_at=COALESCE(accessed_at,?) WHERE id=?',time(),order.id);
+      res.setHeader('Cache-Control','private, no-store');
+      res.setHeader('Content-Disposition',`attachment; filename="categoria-clara-${order.id.slice(0,8)}.pdf"`);
+      return plain(res,200,unseal(report.body),'application/pdf');
+    }
+    if(method==='POST'&&subpath==='/checkout'){
+      limit(req,'checkout',30);
+      await form(req);
+      return redirect(res,await startCheckout(order,secret));
+    }
+    if(method!=='GET'||subpath) fail(405,'Método no permitido');
+    const ready=order.state==='ready'&&!order.purged_at;
+    if(ready) sql('UPDATE orders SET accessed_at=COALESCE(accessed_at,?) WHERE id=?',time(),order.id);
+    const name=getService(order.slug)?.name||'Pedido';
+    const body=order.purged_at?'<p>El contenido de este pedido se eliminó por la política de conservación de datos.</p>'
+      :ready?`<p class="status">Pago acreditado</p><p>${getService(order.slug)?.teaser?'Tu informe está listo':'Tu nota está lista'}. También te enviamos este enlace por correo.</p>${link(self+'/pdf','Descargar PDF')}`
+      :order.state==='pending'?`<div data-autorefresh><p>Estamos esperando la confirmación de Mercado Pago. Esta página se actualiza sola.</p></div><p class="muted small">Si todavía no pagaste, podés hacerlo ahora.</p>${post(self+'/checkout',button('Pagar con Mercado Pago'))}`
+      :`<p>${esc(statuses[order.state])}</p>`;
+    return show(name,`<h1>${getService(order.slug)?.teaser?'Tu informe':'Tu reclamo'}</h1><section class="panel"><p class="muted small">${esc(name)} · Pedido ${esc(order.id)} · ${ars(order.cents)}${order.mode==='test'?' · Ambiente de prueba':''}</p>${body}<p class="muted small">Guardá este enlace: es privado y te da acceso a tu compra.</p></section>${ready?noteBlock(order):''}`);
+  }
+  if(method==='GET'&&path==='/admin'){
+    if(!admin(user)) return show('Administración',`<h1>Administración</h1><section class="panel">${post('/admin/ingresar',authFields+button('Ingresar'))}</section>`,{status:403});
+    const rows=all('SELECT o.*,u.email,d.state delivery FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN deliveries d ON d.order_id=o.id ORDER BY o.created DESC LIMIT 200');
+    const metrics=all('SELECT slug,kind,COUNT(*) quantity FROM events GROUP BY slug,kind');
+    const funnel=all(`SELECT slug,COALESCE(source,'ficha') source,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE kind IN ('view_item','start_form','preview','begin_checkout','purchase') GROUP BY slug,COALESCE(source,'ficha') ORDER BY purchases DESC, views DESC`);
+    const rate=(a,b)=>b?Math.round(a*1000/b)/10+'%':'—';
+    const sales=all("SELECT state,mode,COUNT(*) quantity,SUM(cents) cents FROM orders WHERE approved_payment IS NOT NULL GROUP BY state,mode");
+    const review=all("SELECT o.id,o.slug,a.created FROM orders o JOIN checkout_attempts a ON a.order_id=o.id WHERE o.preference IS NULL AND o.state='pending' ORDER BY a.created DESC LIMIT 100");
+    const duplicates=all("SELECT p.order_id,p.id,p.status FROM payments p JOIN orders o ON o.id=p.order_id WHERE o.approved_payment IS NOT NULL AND o.approved_payment!=p.id AND p.status IN ('approved','in_mediation','charged_back') LIMIT 100");
+    const requests=all('SELECT w.*,o.accessed_at FROM withdrawals w LEFT JOIN orders o ON o.id=w.reference ORDER BY w.created DESC LIMIT 100');
+    return show('Administración',`<h1>Administración</h1><h2>Importes de pedidos con pago aprobado</h2>${table(['Ambiente','Estado','Pedidos','Importe bruto'],sales.map(r=>[esc(r.mode),esc(statuses[r.state]),r.quantity,ars(r.cents)]))}
+      <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No')]))}
+      <h2>Preferencias pendientes de verificar</h2>${table(['Pedido','Servicio','Intento'],review.map(r=>[esc(r.id),esc(r.slug),esc(r.created)]))}
+      <h2>Pagos adicionales para conciliar</h2>${table(['Pedido','ID en Mercado Pago','Estado'],duplicates.map(r=>[esc(r.order_id),esc(r.id),esc(r.status)]))}
+      <h2>Embudo por servicio y página de entrada</h2>${table(['Servicio','Entrada','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Visita → compra','Vista previa → compra'],funnel.map(r=>[esc(r.slug),esc(r.source==='ficha'?'Ficha del servicio':(c=>c?caseUrl(c):r.source)(cases.find(x=>x.path===r.source))),r.views,r.starts,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views),rate(r.purchases,r.previews)]))}
+      <p class="muted small">Conteos de eventos: una persona puede generar varias visitas o vistas previas.</p>
+      <h2>Eventos de conversión</h2>${table(['Servicio','Evento','Cantidad'],metrics.map(r=>[esc(r.slug),esc(r.kind),r.quantity]))}
+      <h2>Solicitudes de arrepentimiento</h2>${table(['Código','Pedido','Correo','Contenido entregado','Estado','Acción'],requests.map(r=>[esc(r.id),esc(r.reference),esc(r.email),esc(r.accessed_at?.slice(0,16).replace('T',' ')||'No'),esc(r.status),r.status==='received'?post('/admin/arrepentimiento',`<input type="hidden" name="id" value="${esc(r.id)}">`+button('Marcar atendida')):'—']))}`);
+  }
+  if(method==='POST'&&path==='/admin/arrepentimiento'){
+    if(!admin(user)) fail(403,'Área restringida.');
+    const {id}=await form(req);
+    sql("UPDATE withdrawals SET status='handled' WHERE id=?",String(id));
+    return redirect(res,'/admin');
+  }
+  if(path==='/arrepentimiento'){
+    if(method==='GET') return show('Botón de arrepentimiento',`<h1>Botón de arrepentimiento</h1><p>Podés enviar tu solicitud sin iniciar sesión. Guardá el código de recepción.</p>${post(path,'<label>Referencia de pedido o comprobante<input name="reference" maxlength="100" required></label><label>Correo de contacto<input name="email" type="email" maxlength="254" required></label>'+button('Enviar solicitud'))}`);
+    limit(req,'withdrawal',10);
+    const {reference,email}=await form(req);
+    if(!reference?.trim()||reference.length>100||!email||email.length>254||!/^\S+@\S+\.\S+$/.test(email)) fail(422,'Revisá la referencia y el correo.');
+    const id=randomUUID();
+    sql("INSERT INTO withdrawals VALUES (?,?,?,'received',?)",id,reference,email,time());
+    return show('Solicitud recibida',`<h1>Solicitud recibida</h1><p>Código de recepción <strong>${id}</strong></p>`,{status:201});
+  }
+  if(method==='GET'&&['/privacidad','/terminos'].includes(path)){
+    const privacy=path==='/privacidad';
+    const content=privacy?release.privacy:release.terms;
+    return show(privacy?'Privacidad':'Términos',`<h1>${privacy?'Privacidad':'Términos'}</h1><section class="panel">${content?String(content).split('\n').map(p=>`<p>${esc(p)}</p>`).join(''):'<p>Instancia de desarrollo. Usá únicamente datos de prueba. La documentación comercial requiere aprobación antes del lanzamiento.</p>'}</section>`);
+  }
+  fail(404,'No encontramos esa página.');
+}
+
+if(process.argv[2]==='admin'){
+  if(!adminEmail||one('SELECT id FROM users WHERE email=?',adminEmail)) throw Error('Configurá un ADMIN_EMAIL nuevo. Si la cuenta existe, requiere revisión.');
+  let secret='';
+  for await(const chunk of process.stdin) secret+=chunk;
+  secret=secret.trim();
+  if(secret.length<16||secret.length>128) throw Error('Usá una contraseña administrativa de 16 a 128 caracteres.');
+  const id=randomUUID();
+  const encoded=await password(secret);
+  atomic(db,()=>{
+    sql('INSERT INTO users VALUES (?,?,?)',id,adminEmail,encoded);
+    sql('INSERT INTO admins VALUES (?)',id);
+  });
+  console.log('Cuenta administrativa creada.');
+} else if(process.argv[2]==='respaldo'){
+  const target=process.argv[3]||`respaldo-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.sqlite`;
+  if(!/^[\w./-]+\.sqlite$/.test(target)||existsSync(target)) throw Error('Indicá un archivo .sqlite nuevo, sin espacios ni comillas.');
+  db.exec(`VACUUM INTO '${target}'`);
+  console.log(`Respaldo creado en ${target}. Guardá aparte la DATA_KEY: sin ella no se pueden leer los reclamos.`);
+} else if(process.argv[2]==='depurar'){
+  if(!retention) throw Error('Configurá RETENTION_DAYS para depurar.');
+  console.log(`${purge()} pedidos depurados.`);
+} else if(process.argv[2]==='conciliar'){
+  if(!await reconcile(process.argv[3]||'')){
+    console.error('El pago no coincide con un pedido de este ambiente.');
+    process.exitCode=1;
+  } else console.log('Pago conciliado con la API de Mercado Pago.');
+} else {
+  createServer((req,res)=>{
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Referrer-Policy','same-origin');
+    res.setHeader('Content-Security-Policy',"default-src 'none'; connect-src 'self'; style-src 'self'; script-src 'self'; form-action 'self' https://*.mercadopago.com.ar https://*.mercadopago.com; base-uri 'none'; frame-ancestors 'none'");
+    if(secure) res.setHeader('Strict-Transport-Security','max-age=31536000');
+    route(req,res).catch(error=>{
+      if(res.headersSent){res.destroy();return;}
+      if(!error.status) console.error('Error interno:',error.code||error.name);
+      page(res,error.status===404?'Página no encontrada':'Error',`<section class="panel error"><h1>${error.status||500}</h1><p>${esc(error.status?error.message:'No se pudo procesar la solicitud.')}</p><a href="/">Ir al inicio</a></section>`,{status:error.status||500});
+    });
+  }).listen(Number(env.PORT||3000),env.HOST||'127.0.0.1',()=>console.log('Categoría Clara en '+origin));
+}

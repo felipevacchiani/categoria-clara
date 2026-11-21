@@ -1,0 +1,22 @@
+export const sources = {
+  multaradar:['ANSV · Consulta de infracciones','https://consultainfracciones.seguridadvial.gob.ar/'],
+  'vtv-facil':['Provincia de Buenos Aires · VTV','https://www.vtv.gba.gob.ar/'],
+  'calculo-indemnizacion':['Ley de Contrato de Trabajo · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-20744-25552/actualizacion'],
+  sueldocheck:['Secretaría de Trabajo · Orientación laboral','https://www.argentina.gob.ar/trabajo/orientacion/laboral'],
+  jubilacheck:['ANSES · Historia Laboral','https://www.argentina.gob.ar/servicio/consultar-tu-historia-laboral'],
+  creditocheck:['BCRA · Comparar costos y condiciones','https://www.bcra.gob.ar/prestamos-personales-comparar-costos-y-condiciones/'],
+  facturacheck:['ARCA · Manual WSCDC','https://www.arca.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf'],
+  monotributocheck:['ARCA · Categorías vigentes','https://www.arca.gob.ar/monotributo/categorias.asp'],
+  importafacil:['ARCA · Tributos en courier','https://www.arca.gob.ar/envios-internacionales/courier/conceptos-generales/tributos.asp'],
+  'mi-partida':['Provincia de Buenos Aires · Solicitud de partidas','https://gba.gob.ar/registrodelaspersonas/solicitud_de_partidas_online'],
+  'apostilla-express':['Cancillería · Apostilla por TAD','https://www.argentina.gob.ar/servicio/legalizar-o-apostillar-un-documento-traves-de-tad'],
+  'pasaporte-listo':['RENAPER · Preguntas frecuentes','https://www.argentina.gob.ar/interior/pasaporte/preguntasfrecuentes'],
+  'visa-check':['Departamento de Estado de EE. UU. · Visa de visitante','https://travel.state.gov/content/travel/en/us-visas/tourism-visit/visitor.html'],
+  'ruta-ciudadania':['Consulado de Italia en Buenos Aires · Ciudadanía','https://consbuenosaires.esteri.it/es/servizi-consolari-e-visti/servizi-per-il-cittadino-straniero/cittadinanza/'],
+  'vuelo-reclamo':['ANAC · Consultas y reclamos','https://www.argentina.gob.ar/servicio/realizar-un-reclamo-consulta-o-sugerencia-ante-la-anac'],
+  'expensa-check':['Código Civil y Comercial · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-26994-235975/actualizacion'],
+  'herencia-check':['Código Civil y Comercial · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-26994-235975/actualizacion'],
+  'seguro-check':['SSN · Reclamos','https://www.argentina.gob.ar/servicio/realizar-un-reclamo-ante-la-superintendencia-de-seguros-de-la-nacion'],
+  'envio-reclamo':['ENACOM · Reclamos postales','https://www.enacom.gob.ar/problemas-con-el-servicio/reclamo_postales_p712'],
+  'consumo-defensa':['Defensa del Consumidor · Canal de reclamos','https://www.argentina.gob.ar/servicio/iniciar-un-reclamo-ante-defensa-del-consumidor']
+};

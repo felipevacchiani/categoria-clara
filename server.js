@@ -51,6 +51,7 @@ const price=s=>{
   return entry.cents;
 };
 // Un servicio pago sin precio habilitado (credenciales o aprobación faltantes) no se muestra: nunca se entrega gratis.
+const isReclamo=s=>['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(s?.slug);
 const shown=()=>catalog.filter(s=>!s.sellable||price(s));
 const event=(kind,slug,id=randomUUID(),source=null)=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source) VALUES (?,?,?,?,?)',id,kind,slug,time(),source);
 const sourceOf=value=>value==='ficha'||cases.some(c=>c.path===value)?value:'ficha';
@@ -630,20 +631,20 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
         try {return redirect(res,await startCheckout(one('SELECT * FROM orders WHERE id=?',id),secret));}
         catch {return redirect(res,'/p/'+secret);}
       }
-      if(!cents) return show(info.title,`<a href="${path}">Volver al formulario</a><h1>${esc(info.title)}</h1><section class="panel result">${renderLines(result.lines)}</section>`);
+      if(!cents) return show(info.title,`<a href="${path}">Volver al formulario</a><h1>${esc(info.title)}</h1><section class="panel result">${renderLines(result.lines)}</section>${info.next?`<section class="panel note-box"><h2>${esc(info.next[0])}</h2><p>${esc(info.next[1])}</p><a class="button" href="${esc(info.next[2])}">${esc(info.next[3])}</a></section>`:''}`);
       const preview=s.teaser?s.teaser(result.lines):(()=>{const f=summary(result.lines);return {facts:[['Para',f.para],['Asunto','Reclamo por '+f.asunto.replace(/^Reclamo por /,'')],['Respuesta hasta',f.limite]],includes:['Nota formal lista para firmar y enviar',`${f.normas} referencias normativas para tu caso`,`${f.pruebas} pruebas para adjuntar`,`${f.pasos} próximos pasos, incluido a qué organismo escalarlo`,...(f.avisos?['Aviso sobre plazos importantes de tu caso']:[])]};})();
       const hidden=s.fields.map(f=>`<input type="hidden" name="${f.key}" value="${esc(values[f.key])}">`).join('')+`<input type="hidden" name="origen" value="${esc(origen)}">`;
       const buy=post(path,hidden+`<label>Tu correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Repetí tu correo<input name="email2" type="email" autocomplete="email" maxlength="254" required></label>${release.withdrawalNotice?`<p class="muted small">${esc(release.withdrawalNotice)}</p>`:''}<label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button name="action" value="order">Pagar y descargar</button>`);
-      return show(info.title,`<a href="${path}">Editar los datos</a><h1>${s.teaser?'Tu resultado':'Tu reclamo está listo'}</h1><div class="svc-grid"><section class="panel"><h2>Vista previa</h2><dl class="facts">${preview.facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
-        <h3>${s.teaser?'El informe completo incluye':'El PDF completo incluye'}</h3>${checks(preview.includes)}
+      return show(info.title,`<a href="${path}">Editar los datos</a><h1>${!isReclamo(s)?'Tu resultado':'Tu reclamo está listo'}</h1><div class="svc-grid"><section class="panel"><h2>Vista previa</h2><dl class="facts">${preview.facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+        <h3>${!isReclamo(s)?'El informe completo incluye':'El PDF completo incluye'}</h3>${checks(preview.includes)}
         <div class="locked" aria-hidden="true"><i></i><i></i><i class="short"></i><i></i><i class="short"></i></div></section>
         <aside class="panel aside buy"><p class="price">${ars(cents)}</p><p class="muted">Pago único con Mercado Pago${live?'':' (ambiente de prueba)'}. Sin crear cuenta: descargás el PDF apenas se acredita y te llega el enlace por correo.</p>${buy}</aside></div>`);
     }
     event('view_item',s.slug,undefined,'ficha');
     const defaults={envio:today(),plazo:'10'};
     return show(info.title,`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">${esc(s.name)}</p><h1>${esc(info.title)}</h1><p class="lead">${esc(info.tagline)}</p></div>
-    <div class="svc-grid"><section class="panel"><h2>${s.teaser?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${s.teaser?'No te pedimos clave fiscal ni datos personales. Escribí los montos como siempre: 1.250.000,50.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
-    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(s.teaser?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}${s.slug==='monotributocheck'?'<p class="muted small">¿Ya sabés tu categoría y querés hacer el trámite? <a href="/guias/como-recategorizarse-en-arca-paso-a-paso">Mirá el instructivo paso a paso</a>.</p>':''}</section>
+    <div class="svc-grid"><section class="panel"><h2>${!isReclamo(s)?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${!isReclamo(s)?'No te pedimos clave fiscal, DNI ni datos personales. Escribí los montos como siempre: 1.250.000,50.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
+    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(!isReclamo(s)?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}${s.slug==='monotributocheck'?'<p class="muted small">¿Ya sabés tu categoría y querés hacer el trámite? <a href="/guias/como-recategorizarse-en-arca-paso-a-paso">Mirá el instructivo paso a paso</a>.</p>':''}</section>
     <aside class="panel aside"><h2>Qué recibís</h2>${checks(info.includes)}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves la vista previa gratis y pagás solo si querés el PDF.</p>`:''}${mock(s,info)}<p class="muted small">Fuente: <a href="${esc(sourceUrl)}">${esc(sourceName)}</a></p></aside></div>
     ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:info.tagline,jsonld:[serviceLd(info.title,info.tagline,path,cents),faqLd(info)]});
   }
@@ -743,10 +744,10 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     if(ready) sql('UPDATE orders SET accessed_at=COALESCE(accessed_at,?) WHERE id=?',time(),order.id);
     const name=getService(order.slug)?.name||'Pedido';
     const body=order.purged_at?'<p>El contenido de este pedido se eliminó por la política de conservación de datos.</p>'
-      :ready?`<p class="status">Pago acreditado</p><p>${getService(order.slug)?.teaser?'Tu informe está listo':'Tu nota está lista'}. También te enviamos este enlace por correo.</p>${link(self+'/pdf','Descargar PDF')}${order.slug==='monotributocheck'?portalInvite(order):''}`
+      :ready?`<p class="status">Pago acreditado</p><p>${!isReclamo(getService(order.slug))?'Tu informe está listo':'Tu nota está lista'}. También te enviamos este enlace por correo.</p>${link(self+'/pdf','Descargar PDF')}${order.slug==='monotributocheck'?portalInvite(order):''}`
       :order.state==='pending'?`<div data-autorefresh><p>Estamos esperando la confirmación de Mercado Pago. Esta página se actualiza sola.</p></div><p class="muted small">Si todavía no pagaste, podés hacerlo ahora.</p>${post(self+'/checkout',button('Pagar con Mercado Pago'))}`
       :`<p>${esc(statuses[order.state])}</p>`;
-    return show(name,`<h1>${getService(order.slug)?.teaser?'Tu informe':'Tu reclamo'}</h1><section class="panel"><p class="muted small">${esc(name)} · Pedido ${esc(order.id)} · ${ars(order.cents)}${order.mode==='test'?' · Ambiente de prueba':''}</p>${body}<p class="muted small">Guardá este enlace: es privado y te da acceso a tu compra.</p></section>${ready?noteBlock(order):''}`);
+    return show(name,`<h1>${!isReclamo(getService(order.slug))?'Tu informe':'Tu reclamo'}</h1><section class="panel"><p class="muted small">${esc(name)} · Pedido ${esc(order.id)} · ${ars(order.cents)}${order.mode==='test'?' · Ambiente de prueba':''}</p>${body}<p class="muted small">Guardá este enlace: es privado y te da acceso a tu compra.</p></section>${ready?noteBlock(order):''}`);
   }
   if(method==='GET'&&path==='/admin'){
     if(!admin(user)) return show('Administración',`<h1>Administración</h1><section class="panel">${post('/admin/ingresar',authFields+button('Ingresar'))}</section>`,{status:403});

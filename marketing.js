@@ -148,7 +148,8 @@ pitch.aguinaldo = {
     ['¿Cuándo se paga?', 'La primera cuota vence el 30 de junio y la segunda el 18 de diciembre, con hasta 4 días hábiles de tolerancia.'],
     ['¿El aguinaldo tiene descuentos?', 'Sí: jubilación, PAMI y obra social, un 17% en total. Si pagás Ganancias, también puede tener retención.']
   ],
-  mock: ['Aguinaldo bruto', 'Descuentos', 'En mano']
+  mock: ['Aguinaldo bruto', 'Descuentos', 'En mano'],
+  next: ['¿Te despidieron o renunciaste?', 'Calculá todo lo que te tienen que pagar en la liquidación final: indemnización, preaviso, vacaciones y aguinaldo, con la reforma laboral 2026.', '/servicios/liquidacion-final', 'Calcular mi liquidación final']
 };
 
 const laboralCases = [

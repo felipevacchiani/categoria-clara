@@ -105,6 +105,63 @@ pitch.monotributocheck = {
   mock: ['Resultado', 'Tu categoría por parámetro', 'Cuota mensual', 'Cuánto podés facturar', 'Paso a paso']
 };
 
+
+// ---- Trabajo: liquidación final (pago) y aguinaldo (gratis) ----
+pitch['liquidacion-final'] = {
+  title: 'Liquidación final',
+  tagline: 'Si te despidieron o renunciaste, calculá todo lo que te tienen que pagar con la reforma laboral 2026: indemnización, preaviso, vacaciones y aguinaldo.',
+  placeholders: { sueldo: 'Ej.: 1.500.000', tomadas: 'Ej.: 0', topeMonto: 'Ej.: 3.000.000' },
+  includes: [
+    'El total a cobrar en mano y el bruto',
+    'Cada concepto con su importe: días trabajados, aguinaldo, vacaciones, preaviso, integración e indemnización',
+    'La base de la indemnización según la Ley 27.802 (reforma laboral 2026), con tope de convenio y piso del 67%',
+    'Qué controlar antes de firmar el recibo y cómo reclamar gratis si no te pagan',
+    'PDF para guardar o llevar a un abogado o al sindicato'
+  ],
+  steps: [
+    ['Cargá tu caso', 'Cómo terminó la relación, fechas de ingreso y egreso, tu sueldo y las vacaciones que te tomaste.'],
+    ['Mirá qué te corresponde gratis', 'Te mostramos cuántos conceptos te tienen que pagar y el plazo de pago.'],
+    ['Pagá y descargá el informe', 'Dejás tu correo, pagás con Mercado Pago y descargás el PDF con cada importe al instante.']
+  ],
+  faq: [
+    ['¿Qué cambió con la reforma laboral?', 'Desde la Ley 27.802 (marzo 2026), la indemnización por antigüedad se calcula sobre el mejor sueldo mensual, normal y habitual, sin aguinaldo, vacaciones ni premios no mensuales. Si hay tope de convenio, la base no puede bajar del 67% del sueldo. En el período de prueba ya no corresponde preaviso.'],
+    ['¿Cuánto tiempo tiene el empleador para pagar?', 'Cuatro días hábiles desde el egreso. El certificado de trabajo se entrega dentro de los 30 días.'],
+    ['¿Sirve si renuncié?', 'Sí. Al renunciar no hay indemnización, pero te corresponden los días trabajados, el aguinaldo proporcional y las vacaciones no gozadas.'],
+    ['¿Qué no incluye el cálculo?', 'Horas extra, comisiones variables, adicionales particulares de tu convenio y reclamos judiciales. Para esos casos, el informe te sirve de base para consultar a un abogado.'],
+    ['¿Tengo que dar mis datos personales?', 'No. Solo fechas y montos. Para comprar dejás tu correo y pagás con Mercado Pago.']
+  ],
+  mock: ['Total a cobrar', 'Concepto por concepto', 'Indemnización art. 245', 'Antes de firmar']
+};
+
+pitch.aguinaldo = {
+  title: 'Calculadora de aguinaldo',
+  tagline: 'Calculá gratis cuánto cobrás de aguinaldo, en mano y en bruto, completo o proporcional a los días trabajados.',
+  placeholders: { sueldo: 'Ej.: 1.200.000' },
+  includes: ['El aguinaldo bruto y en mano', 'Si te corresponde completo o proporcional', 'Hasta cuándo te lo tienen que pagar'],
+  steps: [
+    ['Cargá tu sueldo', 'El mejor sueldo bruto del semestre y tu fecha de ingreso.'],
+    ['Mirá el resultado', 'Gratis y al instante, sin dejar datos.'],
+    ['¿Te fuiste del trabajo?', 'Calculá también tu liquidación final completa.']
+  ],
+  faq: [
+    ['¿Cómo se calcula el aguinaldo?', 'Es la mitad del mejor sueldo bruto mensual del semestre. Si no trabajaste el semestre completo, se paga en proporción a los días trabajados.'],
+    ['¿Cuándo se paga?', 'La primera cuota vence el 30 de junio y la segunda el 18 de diciembre, con hasta 4 días hábiles de tolerancia.'],
+    ['¿El aguinaldo tiene descuentos?', 'Sí: jubilación, PAMI y obra social, un 17% en total. Si pagás Ganancias, también puede tener retención.']
+  ],
+  mock: ['Aguinaldo bruto', 'Descuentos', 'En mano']
+};
+
+const laboralCases = [
+  { path: 'aguinaldo-diciembre-2026', service: 'aguinaldo', title: 'Aguinaldo de diciembre 2026: cuánto cobrás y cuándo', intro: 'El medio aguinaldo de diciembre se paga hasta el 18/12 y es la mitad del mejor sueldo bruto de julio a diciembre. Calculalo gratis con tu sueldo.',
+    points: ['Es el 50% del mejor sueldo bruto del semestre, incluidas horas extra y comisiones de ese mes.', 'Si entraste después del 1 de julio, cobrás en proporción a los días trabajados.', 'Tiene los mismos descuentos que el sueldo: 17% de aportes.', 'El plazo es el 18 de diciembre, con hasta 4 días hábiles de tolerancia.'] },
+  { path: 'como-calcular-liquidacion-final', service: 'liquidacion-final', title: 'Cómo calcular tu liquidación final en 2026', intro: 'La liquidación final suma todo lo que te deben al terminar el trabajo. Qué entra depende de si renunciaste, te despidieron sin causa o estabas en período de prueba.',
+    points: ['Siempre: días trabajados del mes, aguinaldo proporcional y vacaciones no gozadas con su aguinaldo.', 'Despido sin causa: además preaviso (si no te avisaron), integración del mes e indemnización por antigüedad.', 'Período de prueba: desde la Ley 27.802 no corresponden preaviso, integración ni indemnización.', 'El empleador tiene 4 días hábiles para pagar.'] },
+  { path: 'indemnizacion-por-despido-reforma-laboral-2026', service: 'liquidacion-final', title: 'Indemnización por despido con la reforma laboral 2026', intro: 'La Ley 27.802 mantuvo un mes de sueldo por año trabajado, pero cambió qué entra en la base. Calculá tu indemnización con las reglas vigentes.',
+    points: ['Un mes de sueldo por año de servicio o fracción mayor de 3 meses, pasado el período de prueba.', 'La base es el mejor sueldo mensual, normal y habitual: sin aguinaldo, vacaciones ni premios no mensuales.', 'Si hay tope de convenio, la base no puede quedar por debajo del 67% del sueldo.', 'Nunca puede ser menor a un mes de sueldo.'] },
+  { path: 'cuanto-me-corresponde-si-renuncio', service: 'liquidacion-final', title: '¿Cuánto te corresponde si renunciás?', intro: 'Al renunciar no cobrás indemnización, pero sí todo lo que generaste hasta tu último día. Calculá el total antes de firmar.',
+    points: ['Días trabajados del último mes.', 'Aguinaldo proporcional del semestre.', 'Vacaciones no gozadas proporcionales, más su aguinaldo.', 'La renuncia se envía por telegrama laboral gratuito o en persona ante la autoridad laboral.'] }
+];
+
 export const site = {
   service: 'monotributocheck',
   eyebrow: 'Monotributo · Recategorización febrero 2027',
@@ -117,6 +174,7 @@ export const site = {
 
 const baseCases = [
   ...reclamosCases,
+  ...laboralCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
     ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],

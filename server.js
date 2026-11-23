@@ -5,7 +5,7 @@ import {existsSync,mkdirSync,readFileSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {promisify} from 'node:util';
 import {openDatabase,atomic} from './db.js';
-import {services,listed,getService,evaluate} from './services.js';
+import {services,listed as catalog,getService,evaluate} from './services.js';
 import {pitch,cases,site} from './marketing.js';
 import {CONSUMO,ENVIO,VUELO} from './reclamos.js';
 import {matchesPayment,mp,validSignature} from './payments.js';
@@ -50,6 +50,8 @@ const price=s=>{
   if(live&&(entry.version!==s.version||!entry.approval||!entry.approvedBy)) return 0;
   return entry.cents;
 };
+// Un servicio pago sin precio habilitado (credenciales o aprobación faltantes) no se muestra: nunca se entrega gratis.
+const shown=()=>catalog.filter(s=>!s.sellable||price(s));
 const event=(kind,slug,id=randomUUID(),source=null)=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source) VALUES (?,?,?,?,?)',id,kind,slug,time(),source);
 const sourceOf=value=>value==='ficha'||cases.some(c=>c.path===value)?value:'ficha';
 function seal(value) {
@@ -143,7 +145,7 @@ const button=label=>`<button type="submit">${esc(label)}</button>`;
 function page(res, title, body, {user,status=200,canonical,description='Calculá tu categoría del Monotributo, sabé si te tenés que recategorizar y llevá tu facturación al día. Tabla oficial de ARCA.',jsonld}={}) {
   res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':canonical&&!user?'public, max-age=60':'private, no-store','Vary':'Cookie'});
   res.end(`<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#16181d"><title>${esc(title)} · Categoría Clara</title><meta name="description" content="${esc(description)}">${canonical?`<link rel="canonical" href="${esc(origin+canonical)}"><meta property="og:title" content="${esc(title+' · Categoría Clara')}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(origin+canonical)}"><meta property="og:type" content="website"><meta property="og:locale" content="es_AR"><meta property="og:site_name" content="Categoría Clara"><meta property="og:image" content="${esc(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">${jsonld?`<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g,'\\u003c')}</script>`:''}`:'<meta name="robots" content="noindex,nofollow">'}<link rel="stylesheet" href="/style.css"><script defer src="/site.js"></script></head>
-  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a>${user&&user.password!=='!'?'<a href="/mi-facturacion">Mi facturación</a>':''}${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}${user&&user.password!=='!'?'':'<a class="nav-cta" href="/mi-facturacion">Ingresar</a>'}</nav></header>
+  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a>${user&&user.password!=='!'?'<a href="/mi-facturacion">Mi facturación</a>':''}<a href="/#servicios">Servicios</a><a href="/guias">Guías</a><a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}${user&&user.password!=='!'?'':'<a class="nav-cta" href="/mi-facturacion">Ingresar</a>'}</nav></header>
   <main>${body}</main><footer><span>Categoría Clara</span><a href="/guias">Guías de Monotributo</a><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a>${release.support?`<a href="mailto:${esc(release.support)}">Soporte</a>`:''}</footer></body></html>`);
 }
 function plain(res,code,message,type='text/plain; charset=utf-8') {
@@ -332,7 +334,7 @@ const faqHtml=info=>`<section class="block"><h2>Preguntas frecuentes</h2><div cl
 const mock=(s,info)=>`<div class="mock" aria-hidden="true"><div class="mock-band"><span>Categoría Clara</span><strong>${esc(s.name)}</strong></div><div class="mock-body">${info.mock.map(label=>`<b>${esc(label)}</b><i></i><i class="short"></i>`).join('')}</div></div>`;
 const faqLd=info=>({'@context':'https://schema.org','@type':'FAQPage',mainEntity:info.faq.map(([q,a])=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:a}}))});
 const caseUrl=c=>(['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(c.service)?'/reclamos/':'/guias/')+c.path;
-const visibleCases=()=>cases.filter(c=>listed.some(s=>s.slug===c.service));
+const visibleCases=()=>cases.filter(c=>shown().some(s=>s.slug===c.service));
 const SEO_UPDATED='2026-11-23';
 const crumbsLd=items=>({'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:items.map(([name,path],i)=>({'@type':'ListItem',position:i+1,name,item:origin+path}))});
 const articleLd=(title,description,path)=>({'@context':'https://schema.org','@type':'Article',headline:title,description,inLanguage:'es-AR',dateModified:SEO_UPDATED,mainEntityOfPage:origin+path,author:{'@type':'Organization',name:'Categoría Clara'},publisher:{'@type':'Organization',name:'Categoría Clara',logo:{'@type':'ImageObject',url:origin+'/og.png'}},image:origin+'/og.png'});
@@ -589,19 +591,19 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     const list=monoGuides();
     return show('Guías de Monotributo',`<nav class="crumbs" aria-label="Migas"><a href="/">Inicio</a> › <span>Guías</span></nav><div class="svc-head"><h1>Guías de Monotributo</h1><p class="lead">Todo lo que necesitás para manejar tu Monotributo sin vueltas: categorías, recategorización, facturación, pagos, alta y baja. Actualizado con la tabla oficial de ARCA.</p></div><div class="guide-grid">${list.map(c=>`<a class="card guide-card" href="${caseUrl(c)}"><h2>${esc(c.title)}</h2><p>${esc(c.description||c.intro)}</p><span>Leer guía →</span></a>`).join('')}</div>`,{canonical:'/guias',description:'Guías prácticas de Monotributo: tabla de categorías, recategorización, cómo facturar, pagar la cuota, darse de alta y de baja en ARCA.',jsonld:[crumbsLd([['Inicio','/'],['Guías','/guias']]),{'@context':'https://schema.org','@type':'ItemList',itemListElement:list.map((c,i)=>({'@type':'ListItem',position:i+1,url:origin+caseUrl(c),name:c.title}))}]});
   }
-  if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[['/','1.0'],['/guias','0.9'],...listed.map(x=>[pathFor(x),'0.9']),...visibleCases().map(c=>[caseUrl(c),'0.8']),['/mi-facturacion','0.5']].map(([path,prio])=>`<url><loc>${esc(origin+path)}</loc><lastmod>${SEO_UPDATED}</lastmod><priority>${prio}</priority></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
+  if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[['/','1.0'],['/guias','0.9'],...shown().map(x=>[pathFor(x),'0.9']),...visibleCases().map(c=>[caseUrl(c),'0.8']),['/mi-facturacion','0.5']].map(([path,prio])=>`<url><loc>${esc(origin+path)}</loc><lastmod>${SEO_UPDATED}</lastmod><priority>${prio}</priority></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
   if(method==='GET'&&path==='/'){
-    const main=getService(site.service)&&listed.includes(getService(site.service))?getService(site.service):listed[0];
+    const main=getService(site.service)&&shown().includes(getService(site.service))?getService(site.service):shown()[0];
     const info=pitch[main.slug];
-    const cards=listed.length>1?`<section id="servicios" class="block"><h2>Elegí tu caso</h2><div class="grid three">${listed.map(s=>{const p=pitch[s.slug];const cents=price(s);return `<article class="card" data-card><h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p>${cents?`<p class="price-sm">${ars(cents)}</p>`:''}<a class="button" href="${pathFor(s)}">Empezar</a></article>`;}).join('')}</div></section>`:'';
+    const cards=shown().length>1?`<section id="servicios" class="block"><h2>Elegí tu caso</h2><div class="grid three">${shown().map(s=>{const p=pitch[s.slug];const cents=price(s);return `<article class="card" data-card><h3>${esc(p.title)}</h3><p>${esc(p.tagline)}</p><p class="price-sm">${cents?ars(cents):'Gratis'}</p><a class="button" href="${pathFor(s)}">Empezar</a></article>`;}).join('')}</div></section>`:'';
     const guides=visibleCases();
     return show(site.title,`<section class="hero"><p class="eyebrow">${esc(site.eyebrow)}</p><h1>${esc(site.title)}</h1><p>${esc(site.lead)}</p>${link(pathFor(main),site.cta)}<ul class="trust">${site.trust.map(t=>`<li>${esc(t)}</li>`).join('')}</ul></section>
-    ${cards}${guides.length?`<section class="block"><h2>Guías rápidas</h2><div class="case-links">${listed.map(s=>`<div><h3>${esc(pitch[s.slug].title)}</h3><ul>${guides.filter(c=>c.service===s.slug).map(c=>`<li><a href="${caseUrl(c)}">${esc(c.title)}</a></li>`).join('')}</ul></div>`).join('')}</div></section>`:''}
+    ${cards}${guides.length?`<section class="block"><h2>Guías rápidas</h2><div class="case-links">${shown().map(s=>`<div><h3>${esc(pitch[s.slug].title)}</h3><ul>${guides.filter(c=>c.service===s.slug).map(c=>`<li><a href="${caseUrl(c)}">${esc(c.title)}</a></li>`).join('')}</ul></div>`).join('')}</div></section>`:''}
     ${stepsHtml(info)}
     <section class="block split"><div><h2>Qué incluye tu informe</h2>${checks(info.includes)}</div>${mock(main,info)}</section>
     ${faqHtml(info)}`,{canonical:'/',description:site.description,jsonld:[faqLd(info)]});
   }
-  const service=listed.find(s=>s.slug===path.match(/^\/servicios\/([a-z-]+)$/)?.[1]);
+  const service=shown().find(s=>s.slug===path.match(/^\/servicios\/([a-z-]+)$/)?.[1]);
   if(service){
     const s=service;
     const [sourceName,sourceUrl]=sources[s.slug];
@@ -647,8 +649,8 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
   }
   const caseRoute=path.match(/^\/(?:reclamos|guias)\/([a-z0-9-]+)$/);
   const landing=caseRoute&&cases.find(c=>c.path===caseRoute[1]&&caseUrl(c)===path);
-  if(landing&&method==='GET'&&listed.some(x=>x.slug===landing.service)){
-    const s=listed.find(x=>x.slug===landing.service);
+  if(landing&&method==='GET'&&shown().some(x=>x.slug===landing.service)){
+    const s=shown().find(x=>x.slug===landing.service);
     const info=pitch[s.slug];
     const cents=price(s);
     const caso=landing.tipo&&CATALOGS[s.slug]?.[landing.tipo];
@@ -671,7 +673,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     const chunks=[];let size=0;
     for await(const chunk of req){size+=chunk.length;if(size>1024) return plain(res,413,'');chunks.push(chunk);}
     const values=Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString()));
-    if(listed.some(x=>x.slug===values.slug)) event('start_form',values.slug,undefined,sourceOf(values.origen));
+    if(shown().some(x=>x.slug===values.slug)) event('start_form',values.slug,undefined,sourceOf(values.origen));
     return plain(res,204,'');
   }
   if(path==='/mis-reclamos'){

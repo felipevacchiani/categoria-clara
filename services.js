@@ -1,4 +1,5 @@
 import {monotributoFields,evaluateMonotributo,monotributoTeaser} from './monotributo.js';
+import {liquidacionFields,evaluateLiquidacion,liquidacionTeaser,aguinaldoFields,evaluateAguinaldo} from './laboral.js';
 import {choice,CONSUMO,ENVIO,VUELO,internacionalField,consumoEngine,envioEngine,vueloEngine} from './reclamos.js';
 const number = (key, label) => ({ key, label, type: 'number' });
 const field = (key, label) => ({ key, label, type: 'text' });
@@ -53,6 +54,10 @@ const entries = [
 ['monotributocheck','MonotributoCheck',2,'Sabé si te tenés que recategorizar, en qué categoría quedás y cuánto podés facturar.',
  monotributoFields(number),
  evaluateMonotributo,'Revisión de un contador matriculado sobre la tabla vigente y los parámetros de cada caso.',true,'1.0.0'],
+['liquidacion-final','Liquidación Final',1,'Calculá todo lo que te tienen que pagar si te despidieron o renunciaste.',
+ liquidacionFields(number),evaluateLiquidacion,'Revisión de un abogado laboralista para casos con variables, convenio o reclamo judicial.',true,'1.0.0'],
+['aguinaldo','Calculadora de Aguinaldo',1,'Calculá tu aguinaldo neto y bruto, completo o proporcional.',
+ aguinaldoFields(number),evaluateAguinaldo,'Herramienta gratuita.',false,'1.0.0'],
 ['importafacil','ImportaFácil',2,'Armá un presupuesto con el tipo de cambio y los cargos cotizados.',
  [number('mercaderia','Mercadería en moneda de cotización'),number('flete','Flete en la misma moneda'),number('seguro','Seguro en la misma moneda'),number('cambio','Pesos por unidad de esa moneda'),number('cargos','Tributos y otros cargos cotizados en ARS')],
  x => {check(x.cambio>0,'El tipo de cambio debe ser positivo.');const base=(x.mercaderia+x.flete+x.seguro)*x.cambio;return [`Subtotal convertido a pesos: ${money(base)}.`,`Presupuesto según cotización: ${money(base+x.cargos)}.`];},'Régimen, nomenclatura, tributos vigentes y validación aduanera.'],
@@ -109,4 +114,5 @@ export function evaluate(service, values) {
 }
 // Servicios visibles en el sitio. El resto queda oculto (404) hasta que esté listo para vender.
 getService('monotributocheck').teaser = monotributoTeaser;
-export const listed = ['monotributocheck'].map(getService);
+getService('liquidacion-final').teaser = liquidacionTeaser;
+export const listed = ['monotributocheck','liquidacion-final','aguinaldo'].map(getService);

@@ -20,6 +20,8 @@ const formValues={
   'creditocheck':{capital:'500',cuotaA:'300',cuotaB:'290',plazoA:'2',plazoB:'2',cargoA:'10',cargoB:'5'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
   'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',billeteras:'si'},
+  'liquidacion-final':{motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'},
+  'aguinaldo':{sueldo:'1.200.000',ingreso:'2026-09-01',pago:'2026-12-31'},
   'importafacil':{mercaderia:'100',flete:'20',seguro:'5',cambio:'1000',cargos:'1000'},
   'mi-partida':{zona:'Córdoba',tipo:'nacimiento',anio:'1980'},
   'apostilla-express':{documento:'Acta',destino:'España',emisor:'Registro Civil'},
@@ -33,7 +35,7 @@ const formValues={
   'envio-reclamo':{tipo:'no_entregado',empresa:'Operador A',promesa:'2026-01-01',revision:'2026-01-07',hechos:'Sin entrega.',pedido:'entrega',envio:'2026-01-08',plazo:'10'},
   'consumo-defensa':{tipo:'garantia',empresa:'Local A',fecha:'2026-01-01',hechos:'Se entregó con una falla.',pedido:'reposición',envio:'2026-01-05',plazo:'10'}
 };
-const expected=['2026-01-11','20.','4.000','Diferencia','90.','Oferta B','14 dígitos','subís de la categoría C a la D','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
+const expected=['2026-01-11','20.','4.000','Diferencia','90.','Oferta B','14 dígitos','subís de la categoría C a la D','12.000.000,00','397.826,09','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
 for(const [i, service] of services.entries()){
   test(service.name+' procesa y valida sus datos',()=>{
     const {lines}=evaluate(service,formValues[service.slug]);
@@ -102,6 +104,34 @@ function signed(id,secret='secret'){
   const v1=createHmac('sha256',secret).update(`id:${id};request-id:sample;ts:${ts};`).digest('hex');
   return {'x-signature':`ts=${ts},v1=${v1}`,'x-request-id':'sample'};
 }
+test('Liquidación final y aguinaldo: reforma 2026, tope del 67%, período de prueba y renuncia',()=>{
+  const liq=getService('liquidacion-final');
+  const base={motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'};
+  const all=v=>evaluate(liq,{...base,...v}).lines.join('\n');
+  // Tope de convenio: la base no baja del 67% del sueldo (1.005.000 x 8 = 8.040.000).
+  assert.match(all({tope:'si',topeMonto:'500.000'}),/art\. 245\): \$\s8\.040\.000,00/);
+  assert.match(all({tope:'si',topeMonto:'1.200.000'}),/art\. 245\): \$\s9\.600\.000,00/);
+  // Con preaviso trabajado no hay sustitutiva ni integración.
+  assert.doesNotMatch(all({preaviso:'si'}),/- Integración del mes de despido: |- Indemnización sustitutiva del preaviso: /);
+  // Período de prueba y renuncia: sin antigüedad ni preaviso.
+  for(const motivo of ['prueba','renuncia']){const t=all({motivo});assert.doesNotMatch(t,/art\. 245|preaviso: \$/);assert.match(t,/Vacaciones no gozadas/);}
+  // Fracción de 3 meses exactos no suma un período; más de 3 meses sí; mínimo un sueldo.
+  assert.match(all({ingreso:'2024-08-21',egreso:'2026-11-20'}),/2 períodos/);
+  assert.match(all({ingreso:'2024-07-20',egreso:'2026-11-20'}),/3 períodos/);
+  assert.match(all({ingreso:'2026-04-01',egreso:'2026-11-20'}),/245\): \$\s1\.500\.000,00/);
+  assert.match(all({ingreso:'2026-08-01',egreso:'2026-11-20'}),/período de prueba/);
+  // Despido el último día del mes: sin integración.
+  assert.doesNotMatch(all({egreso:'2026-11-30'}),/Integración del mes/);
+  assert.throws(()=>evaluate(liq,{...base,egreso:'2018-01-01'}),/posterior/);
+  const teaser=liq.teaser(evaluate(liq,base).lines);
+  assert.equal(teaser.facts[0][1],'9');
+  assert.doesNotMatch(JSON.stringify(teaser),/\$/);
+  const ag=getService('aguinaldo');
+  assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2026-12-31'}).lines[0],/\$\s415\.000,00 en mano \(\$\s500\.000,00/);
+  assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2027-06-30'}).lines.join(' '),/30\/06\/2027/);
+  assert.equal(ag.sellable,false);
+});
+
 test('La firma y la conciliación comparan vendedor, modo, moneda, referencia y centavos',()=>{
   assert.equal(validSignature('secret','800',signed('800')),true);
   assert.equal(validSignature('secret','801',signed('800')),false);
@@ -136,7 +166,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const origin=`https://localhost:${port}`;
   const local=`http://127.0.0.1:${port}`;
   const release=join(dir,'release.json');
-  await writeFile(release,JSON.stringify({business:'Titular Prueba',cuit:'20-12345678-9',address:'Calle 1, Córdoba',support:'soporte@example.test',products:{monotributocheck:{cents:1052},'consumo-defensa':{cents:1052}}}));
+  await writeFile(release,JSON.stringify({business:'Titular Prueba',cuit:'20-12345678-9',address:'Calle 1, Córdoba',support:'soporte@example.test',products:{monotributocheck:{cents:1052},'consumo-defensa':{cents:1052},'liquidacion-final':{cents:2052}}}));
   const env={PATH:process.env.PATH,DB_PATH:join(dir,'data.sqlite'),DATA_KEY:'e'.repeat(64),PORT:String(port),PUBLIC_ORIGIN:origin,RETENTION_DAYS:'30',
     ADMIN_EMAIL:'admin@example.test',RELEASE_FILE:release,MP_ACCESS_TOKEN:'fixture',MP_WEBHOOK_SECRET:'secret',MP_COLLECTOR_ID:'42'};
   const proc=spawn(process.execPath,['server.js','admin'],{env});
@@ -156,12 +186,14 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,12);
+  assert.equal(markup.match(/href="\/guias\//g).length,16);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
-  assert.doesNotMatch(markup,/data-card|Reclamo a una|Mi cuenta|Servicio completo pendiente/);
+  assert.doesNotMatch(markup,/Reclamo a una|Mi cuenta|Servicio completo pendiente/);
+  assert.match(markup,/href="\/servicios\/liquidacion-final"/);
+  assert.match(markup,/href="\/servicios\/aguinaldo"[\s\S]*?|Gratis/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,16);
+  assert.equal(sitemap.match(/<loc>/g).length,22);
   assert.match(sitemap,/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
   const guias=await (await get('/guias')).text(); assert.match(guias,/Guías de Monotributo/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
   const catPage=await (await get('/guias/categorias-monotributo-cuota-mensual')).text(); assert.match(catPage,/class="table cat-table"/); assert.match(catPage,/"@type":"Article"/); assert.match(catPage,/"@type":"BreadcrumbList"/); assert.match(catPage,/Otras guías de Monotributo/);

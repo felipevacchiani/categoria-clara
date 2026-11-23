@@ -6,6 +6,8 @@ export const sources = {
   jubilacheck:['ANSES · Historia Laboral','https://www.argentina.gob.ar/servicio/consultar-tu-historia-laboral'],
   creditocheck:['BCRA · Comparar costos y condiciones','https://www.bcra.gob.ar/prestamos-personales-comparar-costos-y-condiciones/'],
   facturacheck:['ARCA · Manual WSCDC','https://www.arca.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf'],
+  'liquidacion-final':['Ley de Contrato de Trabajo · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-20744-25552/actualizacion'],
+  aguinaldo:['Ley 23.041 · Sueldo anual complementario','https://www.argentina.gob.ar/normativa/nacional/ley-23041-54479/texto'],
   monotributocheck:['ARCA · Categorías vigentes','https://www.arca.gob.ar/monotributo/categorias.asp'],
   importafacil:['ARCA · Tributos en courier','https://www.arca.gob.ar/envios-internacionales/courier/conceptos-generales/tributos.asp'],
   'mi-partida':['Provincia de Buenos Aires · Solicitud de partidas','https://gba.gob.ar/registrodelaspersonas/solicitud_de_partidas_online'],

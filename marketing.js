@@ -115,6 +115,16 @@ export const site = {
 
 export const cases = [
   ...reclamosCases,
+  { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
+    ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
+    ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],
+    ['Entrá a Comprobantes en línea', 'Ingresá a arca.gob.ar con CUIT y clave fiscal, abrí «Comprobantes en línea» y elegí tu nombre.'],
+    ['Generar comprobantes', 'Elegí el punto de venta y el tipo «Factura C». Continuá.'],
+    ['Datos de emisión', 'Fecha del comprobante y concepto: Productos, Servicios o ambos. Si son servicios, indicá el período facturado y el vencimiento de pago.'],
+    ['Datos del receptor', 'Condición frente al IVA del cliente (Consumidor Final, Responsable Inscripto, Monotributo, Exento), su CUIT o DNI si corresponde y la condición de venta (contado, transferencia, tarjeta, etc.).'],
+    ['Datos de la operación', 'Descripción de lo que vendés o del servicio, cantidad, unidad y precio unitario. Revisá el importe total.'],
+    ['Confirmá y descargá', 'En el resumen controlá todo y tocá «Confirmar datos». El comprobante queda con su CAE: descargá el PDF y mandáselo a tu cliente.']
+  ] },
   { path: 'como-recategorizarse-en-arca-paso-a-paso', service: 'monotributocheck', title: 'Cómo recategorizarte en ARCA, paso a paso', intro: 'El trámite se hace online con tu clave fiscal y lleva unos 10 minutos. Antes de empezar, calculá qué categoría te corresponde: si no cambia, no tenés que hacer nada.', points: ['El plazo vence el 5 de febrero de 2027.', 'Se toma lo facturado de enero a diciembre de 2026, más superficie, luz y alquileres si tenés local.', 'Si no te recategorizás y correspondía, ARCA puede hacerlo de oficio y aplicar multas.'], steps: [
     ['Calculá tu categoría', 'Sumá lo facturado de enero a diciembre de 2026 y, si tenés local, superficie, kWh de luz y alquileres. La categoría la define el parámetro más alto. Si es la misma que tenés, terminaste.'],
     ['Entrá a ARCA', 'Ingresá a arca.gob.ar con tu CUIT y clave fiscal (nivel 2 o superior).'],

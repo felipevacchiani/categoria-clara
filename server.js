@@ -1,3 +1,4 @@
+import {TABLE as MONO_TABLE,RECATEGORIZACION} from './monotributo.js';
 import {createServer} from 'node:http';
 import {createHash,randomBytes,randomUUID,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync} from 'node:fs';
@@ -81,7 +82,7 @@ const button=label=>`<button type="submit">${esc(label)}</button>`;
 function page(res, title, body, {user,status=200,canonical,description='Armá tu reclamo a una empresa, un envío o una aerolínea con la normativa argentina que aplica.',jsonld}={}) {
   res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':canonical&&!user?'public, max-age=60':'private, no-store','Vary':'Cookie'});
   res.end(`<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#16181d"><title>${esc(title)} · Categoría Clara</title><meta name="description" content="${esc(description)}">${canonical?`<link rel="canonical" href="${esc(origin+canonical)}"><meta property="og:title" content="${esc(title+' · Categoría Clara')}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(origin+canonical)}"><meta property="og:type" content="website"><meta property="og:locale" content="es_AR"><meta property="og:site_name" content="Categoría Clara"><meta property="og:image" content="${esc(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">${jsonld?`<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g,'\\u003c')}</script>`:''}`:'<meta name="robots" content="noindex,nofollow">'}<link rel="stylesheet" href="/style.css"><script defer src="/site.js"></script></head>
-  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a>${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}</nav></header>
+  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a><a href="/mi-facturacion">Mi facturación</a>${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}</nav></header>
   <main>${body}</main><footer><span>Categoría Clara</span><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a>${release.support?`<a href="mailto:${esc(release.support)}">Soporte</a>`:''}</footer></body></html>`);
 }
 function plain(res,code,message,type='text/plain; charset=utf-8') {
@@ -322,12 +323,46 @@ async function route(req,res) {
     catch {return plain(res,503,'Reintentar más tarde');}
   }
   if(method==='GET'&&path==='/og.png') {res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(new URL('./public/og.png',import.meta.url)));}
-  if(method==='GET'&&['/style.css','/site.js'].includes(path)) return plain(res,200,readFileSync(new URL('./public'+path,import.meta.url)),path.endsWith('css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8');
+  if(method==='GET'&&['/style.css','/site.js','/portal.js'].includes(path)) return plain(res,200,readFileSync(new URL('./public'+path,import.meta.url)),path.endsWith('css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8');
   const user=identity(req);
   const show=(title,body,options)=>page(res,title,body,{user,...options});
   if(method==='GET'&&path==='/health') return plain(res,200,'ok');
   if(method==='GET'&&path==='/robots.txt') return plain(res,200,env.INDEX_PUBLIC==='1'?`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /pedido/\nSitemap: ${origin}/sitemap.xml\n`:'User-agent: *\nDisallow: /\n');
-  if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/',...listed.map(pathFor),...visibleCases().map(caseUrl)].map(path=>`<url><loc>${esc(origin+path)}</loc></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
+  if(method==='GET'&&path==='/tabla.json'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=3600'});return res.end(JSON.stringify({id:MONO_TABLE.id,vigencia:MONO_TABLE.vigencia,categorias:MONO_TABLE.categorias.map(({cat,ingresos})=>({cat,ingresos})),recategorizacion:RECATEGORIZACION}));}
+  if(method==='GET'&&path==='/mi-facturacion'){
+    event('view_item','portal',undefined,'portal');
+    const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
+    return show('Mi facturación',`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">Gratis · sin cuenta</p><h1>Mi facturación</h1><p class="lead">Cargá tus facturas a medida que las hacés y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías en la próxima recategorización.</p></div>
+<div id="portal">
+<section class="kpis">
+  <div class="kpi"><span>Facturado en el período</span><b id="k-total">$ 0,00</b><small id="k-periodo"></small></div>
+  <div class="kpi accent"><span>Por ingresos te corresponde</span><b id="k-cat">…</b><small id="k-cat-note"></small></div>
+  <div class="kpi"><span>Vence la recategorización</span><b id="k-vence">—</b><small>Últimos 12 meses: <span id="k-rolling">$ 0,00</span></small></div>
+</section>
+<div class="panel wide"><div class="progress"><div id="k-bar"></div></div><p id="k-bar-txt" class="small"></p>
+  <div class="cfg"><label>¿A qué te dedicás?<select id="cfg-actividad"><option value="servicios">Servicios</option><option value="bienes">Venta de productos</option></select></label>
+  <label>Tu categoría actual<select id="cfg-categoria"><option value="">Elegí</option>${cats}</select></label></div>
+  <h3>Por mes</h3><div id="chart" class="chart" aria-hidden="true"></div><p class="muted small" id="k-tabla"></p></div>
+<div class="svc-grid">
+<section class="panel"><h2>Cargar un comprobante</h2>
+  <form id="add" class="inline-form" novalidate><div class="row2"><label>Fecha<input name="fecha" type="date" required></label><label>Tipo<select name="tipo"><option value="F">Factura</option><option value="NC">Nota de crédito (resta)</option></select></label></div>
+  <label>Monto total<span class="num pre" data-unit="$"><input name="monto" type="text" inputmode="decimal" autocomplete="off" data-num="money" placeholder="Ej.: 150.000"></span></label>
+  <div class="row2"><label>Número <small>(opcional)</small><input name="numero" maxlength="40" placeholder="00001-00000123"></label><label>Cliente <small>(opcional)</small><input name="cliente" maxlength="80"></label></div>
+  <button>Agregar</button> <span id="add-msg" class="small muted" role="status"></span></form>
+  <h3>O importá todo de ARCA</h3><p class="small muted">En ARCA entrá a <b>Mis Comprobantes → Emitidos</b>, elegí las fechas, buscá y descargá el archivo CSV. Subilo acá: sumamos facturas y restamos notas de crédito, sin repetir.</p>
+  <label class="file">Subir CSV de Mis Comprobantes<input id="csv" type="file" accept=".csv,text/csv"></label><p id="csv-msg" class="small" role="status"></p>
+</section>
+<aside class="panel aside"><h2>¿Querés el informe completo?</h2><p class="small">Esto mira solo tus ingresos. El informe suma superficie, luz y alquileres, te calcula la cuota nueva, las alertas y el paso a paso, en PDF.</p><a id="to-report" class="button" href="/servicios/monotributocheck">Pasar mis números al informe</a><p id="to-report-note" class="small muted"></p>
+<h3>Tus datos son tuyos</h3><p class="small muted">Todo queda guardado solo en este navegador: no lo vemos ni lo guardamos. Descargá un respaldo para no perderlo o pasarlo a otra compu.</p>
+<div class="btns"><button type="button" class="ghost" id="export">Descargar respaldo</button><label class="file ghost-file">Restaurar respaldo<input id="import" type="file" accept=".json,application/json"></label></div><p id="backup-msg" class="small" role="status"></p>
+<p class="small"><a href="/guias/como-hacer-factura-c-arca">¿Cómo se hace una factura en ARCA?</a></p></aside>
+</div>
+<section class="panel wide"><div class="list-head"><h2>Tus comprobantes</h2><span id="count" class="muted small"></span><button type="button" class="link" id="wipe">Borrar todo</button></div>
+<p id="empty" class="muted">Todavía no cargaste comprobantes.</p>
+<div class="table"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Número</th><th>Cliente</th><th class="right">Monto</th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
+</div><script src="/portal.js" defer></script>`,{canonical:'/mi-facturacion',description:'Cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría del Monotributo quedarías. Gratis y sin cuenta.'});
+  }
+  if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/','/mi-facturacion',...listed.map(pathFor),...visibleCases().map(caseUrl)].map(path=>`<url><loc>${esc(origin+path)}</loc></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
   if(method==='GET'&&path==='/'){
     const main=getService(site.service)&&listed.includes(getService(site.service))?getService(site.service):listed[0];
     const info=pitch[main.slug];

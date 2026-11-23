@@ -156,12 +156,19 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,6);
+  assert.equal(markup.match(/href="\/guias\//g).length,7);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/data-card|Reclamo a una|Mi cuenta|Servicio completo pendiente/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,8);
+  assert.equal(sitemap.match(/<loc>/g).length,10);
+  // Portal Mi facturación: página, script y tabla pública
+  const portal=await (await get('/mi-facturacion')).text();
+  assert.match(portal,/id="portal"/); assert.match(portal,/src="\/portal.js"/); assert.match(portal,/<option value="K">/);
+  assert.equal((await get('/portal.js')).status,200);
+  const tabla=await (await get('/tabla.json')).json();
+  assert.equal(tabla.categorias.length,11); assert.equal(tabla.categorias[0].cat,'A'); assert.ok(tabla.recategorizacion.vence);
+  assert.match(await (await get('/guias/como-hacer-factura-c-arca')).text(),/class="howto"/);
   for(const hidden of ['/servicios/consumo-defensa','/reclamos/vuelo-cancelado','/servicios/multaradar','/cuenta','/guias/vuelo-cancelado']) assert.equal((await get(hidden)).status,404);
   const landing=await (await get('/guias/'+guide)).text();
   assert.match(landing,/Cuánto podés facturar en diciembre/);

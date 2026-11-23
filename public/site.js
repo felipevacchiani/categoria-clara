@@ -33,6 +33,16 @@ if(serviceForm && !serviceForm.querySelector('input[type=hidden]')){
     try { sessionStorage.setItem(storeKey, JSON.stringify(Object.fromEntries(new FormData(serviceForm)))); } catch {}
   });
 }
+// Datos que llegan desde "Mi facturación" (?ingresos=...&categoria=...)
+if(serviceForm && location.search){
+  const params = new URLSearchParams(location.search);
+  let any = false;
+  for(const [name,value] of params){
+    const field = serviceForm.elements[name];
+    if(field && field.type !== 'hidden' && value.length < 40){ field.value = value; any = true; }
+  }
+  if(any) serviceForm.scrollIntoView({block:'start'});
+}
 for(const button of document.querySelectorAll('[data-copy]')) {
   button.addEventListener('click', async () => {
     const text = document.querySelector(button.dataset.copy)?.textContent ?? '';

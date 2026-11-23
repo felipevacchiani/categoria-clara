@@ -98,6 +98,23 @@ async function checkPassword(account,candidatePlain){
   const candidate=await password(String(candidatePlain||'').slice(0,128),stored.split(':')[0]);
   return usable&&stored.length===candidate.length&&timingSafeEqual(Buffer.from(stored),Buffer.from(candidate));
 }
+async function sendAccountLink(account,purpose){
+  const raw=randomBytes(32).toString('hex');
+  sql('DELETE FROM account_tokens WHERE expires<=? OR (user_id=? AND purpose=?)',Date.now(),account.id,purpose);
+  sql('INSERT INTO account_tokens VALUES (?,?,?,?)',hash(raw),account.id,purpose,Date.now()+(purpose==='reset'?3600000:7*86400000));
+  const url=`${origin}/cuenta/${purpose==='reset'?'restablecer':'verificar'}?t=${raw}`;
+  const [subject,text]=purpose==='reset'
+    ?['Restablecer tu contraseña · Categoría Clara','Pediste cambiar la contraseña de tu cuenta de Categoría Clara. Entrá a este enlace dentro de la próxima hora. Si no fuiste vos, ignorá este correo: tu contraseña no cambia.']
+    :['Confirmá tu correo · Categoría Clara','Bienvenido a Categoría Clara. Confirmá tu correo entrando a este enlace (vale 7 días). Así podés recuperar tu cuenta si olvidás la contraseña.'];
+  try {await mailLink(account.email,subject,text,url);} catch {console.error('Error al enviar correo de cuenta');}
+}
+function takeToken(raw,purpose,consume=true){
+  if(!/^[a-f0-9]{64}$/.test(String(raw||''))) return null;
+  const row=one('SELECT * FROM account_tokens WHERE digest=? AND purpose=? AND expires>?',hash(raw),purpose,Date.now());
+  if(row&&consume) sql('DELETE FROM account_tokens WHERE digest=?',row.digest);
+  return row?one('SELECT * FROM users WHERE id=?',row.user_id):null;
+}
+const verified=account=>Boolean(one('SELECT 1 FROM verified_emails WHERE user_id=?',account.id));
 function portalData(account){
   const perfil=one('SELECT actividad,categoria FROM portal_profiles WHERE user_id=?',account.id)||{actividad:'servicios',categoria:''};
   const facturas=all('SELECT id,fecha,tipo,cents,detail FROM invoices WHERE user_id=? ORDER BY fecha DESC,created DESC',account.id).map(r=>{
@@ -372,10 +389,11 @@ async function route(req,res) {
     if(!user) return show('Mi facturación',head+`<div class="svc-grid auth">
 <section class="panel"><h2>Creá tu cuenta</h2><p class="muted small">Gratis. Solo tu correo y una contraseña. Nunca te pedimos clave fiscal.</p>
 ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetí la contraseña<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button>Crear cuenta</button>`)}</section>
-<aside class="panel aside"><h2>Ya tengo cuenta</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}
+<aside class="panel aside"><h2>Ya tengo cuenta</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}<p class="small"><a href="/cuenta/olvide">Olvidé mi contraseña</a></p>
 <h3>Qué vas a poder hacer</h3>${checks(['Cargar facturas y notas de crédito, o importar el CSV de Mis Comprobantes','Ver cuánto llevás facturado y en qué categoría quedarías','Saber cuánto te falta para el tope de tu categoría','Tener todo guardado y verlo desde el celu o la compu'])}</aside></div>`,{canonical:'/mi-facturacion',description:'Cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría del Monotributo quedarías. Gratis.'});
     const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
-    return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>
+    const pending=!verified(user)?`<div class="panel wide note-box verify"><p><b>Confirmá tu correo.</b> Te mandamos un enlace a ${esc(user.email)}. Sirve para recuperar la cuenta si olvidás la contraseña.</p>${post('/cuenta/reenviar','<button class="ghost">Reenviar el correo</button>')}</div>`:'';
+    return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}
 <div id="portal" data-account="1"><div id="migrate" class="panel wide note-box" hidden><p id="migrate-txt"></p><button type="button" id="migrate-btn">Pasarlos a mi cuenta</button> <button type="button" class="link" id="migrate-skip">No, gracias</button></div>
 <section class="kpis">
   <div class="kpi"><span>Facturado en el período</span><b id="k-total">$ 0,00</b><small id="k-periodo"></small></div>
@@ -407,7 +425,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
 <details class="danger"><summary>Eliminar mi cuenta</summary>${post('/cuenta/eliminar',`<p class="small">Se borran tu cuenta y todos tus comprobantes. No se puede deshacer. Escribí <b>ELIMINAR</b> para confirmar.</p><label>Confirmación<input name="confirm" maxlength="10" required></label><button>Eliminar cuenta y datos</button>`)}</details>`,{canonical:'/mi-facturacion'});
   }
   if(method==='POST'&&path==='/cuenta/crear'){
-    limit(req,'identity',12);
+    limit(req,'signup',8);
     const input=await form(req);
     const email=String(input.email||'').trim().toLowerCase();
     const pass=String(input.password||'');
@@ -423,14 +441,56 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     account=one('SELECT * FROM users WHERE email=?',email);
     sql('INSERT INTO policy_reads VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET version=excluded.version, created=excluded.created',account.id,policy,time());
     event('sign_up','portal',undefined,'portal');
+    sql('DELETE FROM sessions WHERE user_id=?',account.id);
     await startSession(res,account);
+    await sendAccountLink(account,'verify');
     return redirect(res,'/mi-facturacion');
   }
   if(method==='POST'&&path==='/cuenta/ingresar'){
-    limit(req,'identity',12);
+    limit(req,'login',15);
     const input=await form(req);
     const account=one('SELECT * FROM users WHERE email=?',String(input.email||'').trim().toLowerCase());
     if(!(await checkPassword(account,input.password))) fail(401,'Correo o contraseña incorrectos.');
+    await startSession(res,account);
+    return redirect(res,'/mi-facturacion');
+  }
+  if(method==='GET'&&path==='/cuenta/verificar'){
+    const account=takeToken(url.searchParams.get('t'),'verify');
+    if(!account) fail(410,'El enlace venció o ya se usó. Ingresá y pedí uno nuevo.');
+    sql('INSERT OR IGNORE INTO verified_emails VALUES (?)',account.id);
+    return show('Correo confirmado','<h1>Correo confirmado</h1><section class="panel"><p>Listo, tu correo quedó confirmado.</p><a class="button" href="/mi-facturacion">Ir a Mi facturación</a></section>');
+  }
+  if(method==='POST'&&path==='/cuenta/reenviar'){
+    await form(req);
+    if(!user) fail(401,'Ingresá a tu cuenta.');
+    limit(req,'reset',8);
+    if(!verified(user)) await sendAccountLink(user,'verify');
+    return show('Revisá tu correo',`<h1>Revisá tu correo</h1><section class="panel"><p>Te mandamos el enlace a ${esc(user.email)}. Si no llega en unos minutos, mirá en spam.</p><a href="/mi-facturacion">Volver</a></section>`);
+  }
+  if(method==='GET'&&path==='/cuenta/olvide') return show('Recuperar contraseña',`<h1>Recuperar contraseña</h1><section class="panel">${post('/cuenta/olvide','<label>Tu correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><button>Mandame el enlace</button>')}</section>`);
+  if(method==='POST'&&path==='/cuenta/olvide'){
+    limit(req,'reset',8);
+    const input=await form(req);
+    const account=one('SELECT * FROM users WHERE email=?',String(input.email||'').trim().toLowerCase());
+    if(account&&account.password!=='!') await sendAccountLink(account,'reset');
+    return show('Revisá tu correo','<h1>Revisá tu correo</h1><section class="panel"><p>Si hay una cuenta con ese correo, te mandamos un enlace para cambiar la contraseña. Vence en una hora.</p></section>');
+  }
+  if(method==='GET'&&path==='/cuenta/restablecer'){
+    const raw=url.searchParams.get('t');
+    if(!takeToken(raw,'reset',false)) fail(410,'El enlace venció o ya se usó. Pedí uno nuevo.');
+    return show('Nueva contraseña',`<h1>Elegí una contraseña nueva</h1><section class="panel">${post('/cuenta/restablecer',`<input type="hidden" name="t" value="${esc(raw)}"><label>Contraseña nueva <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetila<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><button>Guardar contraseña</button>`)}</section>`);
+  }
+  if(method==='POST'&&path==='/cuenta/restablecer'){
+    limit(req,'reset',8);
+    const input=await form(req);
+    const pass=String(input.password||'');
+    if(pass.length<10||pass.length>128) fail(422,'La contraseña tiene que tener entre 10 y 128 caracteres.');
+    if(pass!==String(input.password2||'')) fail(422,'Las contraseñas no coinciden.');
+    const account=takeToken(input.t,'reset');
+    if(!account) fail(410,'El enlace venció o ya se usó. Pedí uno nuevo.');
+    sql('UPDATE users SET password=? WHERE id=?',await password(pass),account.id);
+    sql('INSERT OR IGNORE INTO verified_emails VALUES (?)',account.id);
+    sql('DELETE FROM sessions WHERE user_id=?',account.id);
     await startSession(res,account);
     return redirect(res,'/mi-facturacion');
   }
@@ -443,6 +503,8 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
       sql('DELETE FROM invoices WHERE user_id=?',user.id);
       sql('DELETE FROM portal_profiles WHERE user_id=?',user.id);
       sql('DELETE FROM sessions WHERE user_id=?',user.id);
+      sql('DELETE FROM account_tokens WHERE user_id=?',user.id);
+      sql('DELETE FROM verified_emails WHERE user_id=?',user.id);
       if(one('SELECT 1 FROM orders WHERE user_id=?',user.id)) sql("UPDATE users SET password='!' WHERE id=?",user.id);
       else {sql('DELETE FROM policy_reads WHERE user_id=?',user.id);sql('DELETE FROM users WHERE id=?',user.id);}
     });

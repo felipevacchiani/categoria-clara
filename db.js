@@ -20,6 +20,7 @@ export function openDatabase(path) {
   CREATE TABLE IF NOT EXISTS invoices(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),fecha TEXT NOT NULL,tipo TEXT NOT NULL,cents INTEGER NOT NULL,detail BLOB NOT NULL,dedupe TEXT,created TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS invoices_user ON invoices(user_id,fecha);
   CREATE UNIQUE INDEX IF NOT EXISTS invoices_dedupe ON invoices(user_id,dedupe);
+  CREATE TABLE IF NOT EXISTS account_tokens(digest TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),purpose TEXT NOT NULL,expires INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS withdrawals(id TEXT PRIMARY KEY,reference TEXT NOT NULL,email TEXT NOT NULL,status TEXT NOT NULL,created TEXT NOT NULL);
   `);
   const columns=db.prepare('PRAGMA table_info(orders)').all().map(column=>column.name);

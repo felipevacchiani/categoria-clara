@@ -180,7 +180,10 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(await (await get('/mi-facturacion',ana)).text(),/Confirmá tu correo/);
   const vt=linkFor('verificar'); assert.ok(vt);
   assert.equal((await get('/cuenta/verificar?t='+vt)).status,200);
-  assert.equal((await get('/cuenta/verificar?t='+vt)).status,410);
+  assert.equal((await get('/cuenta/verificar?t='+vt)).status,200);
+  assert.match(await (await get('/mi-facturacion',ana)).text(),/Confirmá tu correo/);
+  assert.equal((await send('/cuenta/verificar',{t:vt})).status,200);
+  assert.equal((await send('/cuenta/verificar',{t:vt})).status,410);
   assert.doesNotMatch(await (await get('/mi-facturacion',ana)).text(),/Confirmá tu correo/);
   assert.equal((await send('/cuenta/olvide',{email:'nadie@example.test'})).status,200);
   assert.equal((await send('/cuenta/olvide',{email:'ana@example.test'})).status,200);

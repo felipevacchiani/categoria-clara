@@ -455,7 +455,14 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     return redirect(res,'/mi-facturacion');
   }
   if(method==='GET'&&path==='/cuenta/verificar'){
-    const account=takeToken(url.searchParams.get('t'),'verify');
+    const raw=url.searchParams.get('t');
+    const account=takeToken(raw,'verify',false);
+    if(!account) fail(410,'El enlace venció o ya se usó. Ingresá y pedí uno nuevo.');
+    return show('Confirmar correo',`<h1>Confirmá tu correo</h1><section class="panel"><p>Tocá el botón para confirmar <b>${esc(account.email)}</b>.</p>${post('/cuenta/verificar',`<input type="hidden" name="t" value="${esc(raw)}"><button>Confirmar mi correo</button>`)}</section>`);
+  }
+  if(method==='POST'&&path==='/cuenta/verificar'){
+    const input=await form(req);
+    const account=takeToken(input.t,'verify');
     if(!account) fail(410,'El enlace venció o ya se usó. Ingresá y pedí uno nuevo.');
     sql('INSERT OR IGNORE INTO verified_emails VALUES (?)',account.id);
     return show('Correo confirmado','<h1>Correo confirmado</h1><section class="panel"><p>Listo, tu correo quedó confirmado.</p><a class="button" href="/mi-facturacion">Ir a Mi facturación</a></section>');

@@ -102,3 +102,10 @@ details.danger{margin:2rem 0 0;font-size:.9rem;color:var(--muted)}details.danger
 .auth .aside{border-top-color:var(--ink)}
 nav a.nav-cta{background:var(--ink);color:#fffaf0;padding:.45rem .9rem;border-radius:.4rem;text-decoration:none;font-weight:600}nav a.nav-cta:hover{color:var(--accent)}
 .portal-invite{margin-top:1.5rem;padding:1.2rem 1.3rem;border-radius:.6rem;background:var(--ink);color:#f3eee5}.portal-invite h2{color:#fffaf0;font-size:1.3rem;margin:0 0 .4rem}.portal-invite p{color:#d9d2c5}.portal-invite .button{background:var(--accent);color:var(--ink)}
+/* Guías / SEO */
+.crumbs{font-size:.85rem;color:var(--muted);margin:.5rem 0 0}.crumbs a{color:var(--muted)}.crumbs span{color:var(--ink-2)}
+article.guide{max-width:52rem;margin:0 0 2.5rem;font-size:1.05rem}article.guide h2{margin:2rem 0 .6rem;font-size:1.5rem}article.guide p{margin:.6rem 0;color:var(--ink-2)}
+.cat-table{background:var(--surface);border:1px solid var(--border);border-radius:.6rem;margin:1rem 0 .4rem}.cat-table table{font-variant-numeric:tabular-nums;font-size:.92rem}.cat-table caption{text-align:left;padding:.8rem;font-weight:600;color:var(--muted);font-size:.85rem}.cat-table tbody th{font-family:var(--serif);font-size:1.1rem}.cat-table tbody tr:hover{background:#fbf6ec}
+ul.related{columns:2;column-gap:2rem;padding-left:1.1rem;max-width:52rem}ul.related li{margin:.35rem 0;break-inside:avoid}@media(max-width:620px){ul.related{columns:1}}
+.guide-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem;margin-bottom:2rem}
+a.guide-card{text-decoration:none;color:inherit;transition:border-color .15s ease,transform .15s ease}a.guide-card:hover{border-color:var(--ink);transform:translateY(-2px)}a.guide-card h2{font-size:1.2rem;margin:.2rem 0 .4rem}a.guide-card p{color:var(--muted);font-size:.95rem}a.guide-card span{font-weight:650;color:var(--accent-ink)}

@@ -1,3 +1,4 @@
+import { extra, enrich } from './guias.js';
 // Contenido comercial de las páginas públicas. Solo los servicios listados acá se muestran en el sitio.
 export const pitch = {
   'consumo-defensa': {
@@ -114,7 +115,7 @@ export const site = {
   description: 'Calculá tu recategorización del Monotributo con la tabla oficial de ARCA: categoría, cuota, cuánto podés facturar en diciembre y paso a paso.'
 };
 
-export const cases = [
+const baseCases = [
   ...reclamosCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
@@ -141,3 +142,4 @@ export const cases = [
   { path: 'exclusion-del-monotributo', service: 'monotributocheck', title: '¿Te pueden excluir del Monotributo?', intro: 'Si superás el tope de la categoría K, o algún otro parámetro máximo, quedás fuera del régimen y pasás a IVA y Ganancias. Revisá tu situación antes de que lo haga ARCA.', points: ['El tope máximo de ingresos es el de la categoría K.', 'En venta de productos también hay un precio unitario máximo.', 'Superficie, energía y alquileres también tienen máximos.'] },
   { path: 'categorias-monotributo-cuota-mensual', service: 'monotributocheck', title: 'Categorías del Monotributo y cuánto se paga por mes', intro: 'Cada categoría tiene un tope de facturación y una cuota mensual que incluye impuesto, jubilación y obra social. Calculá la tuya con tus números.', points: ['Hay 11 categorías, de la A a la K.', 'La cuota cambia según si prestás servicios o vendés productos.', 'ARCA actualiza los topes y las cuotas dos veces por año por inflación.'] }
 ];
+export const cases = [...baseCases, ...extra].map(c => enrich[c.path] ? { ...c, ...enrich[c.path] } : c);

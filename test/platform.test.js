@@ -156,12 +156,15 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,7);
+  assert.equal(markup.match(/href="\/guias\//g).length,12);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/data-card|Reclamo a una|Mi cuenta|Servicio completo pendiente/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,10);
+  assert.equal(sitemap.match(/<loc>/g).length,16);
+  assert.match(sitemap,/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
+  const guias=await (await get('/guias')).text(); assert.match(guias,/Guías de Monotributo/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
+  const catPage=await (await get('/guias/categorias-monotributo-cuota-mensual')).text(); assert.match(catPage,/class="table cat-table"/); assert.match(catPage,/"@type":"Article"/); assert.match(catPage,/"@type":"BreadcrumbList"/); assert.match(catPage,/Otras guías de Monotributo/);
   // Portal Mi facturación: página, script y tabla pública
   const anon=await (await get('/mi-facturacion')).text();
   assert.match(anon,/Activá tu portal/); assert.doesNotMatch(anon,/id="portal"/);

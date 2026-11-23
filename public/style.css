@@ -57,3 +57,19 @@ select{appearance:auto}
 .note{white-space:pre-wrap;font:inherit;background:var(--paper);border:1px solid var(--border);border-radius:.4rem;padding:1rem;max-height:28rem;overflow:auto}
 .case-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:1rem}.case-links h3{font-size:1.05rem;margin:.2rem 0 .4rem}.case-links ul{margin:0;padding-left:1.1rem}.case-links li{margin:.3rem 0}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}.mock{transform:none}}
+/* Formulario dinámico */
+label[hidden]{display:none}
+.num{position:relative;display:block;margin-top:.3rem}.num input{margin-top:0;font-variant-numeric:tabular-nums}
+.num.pre input{padding-left:1.8rem}.num.pre::before{content:attr(data-unit);position:absolute;left:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600;pointer-events:none}
+.num.post input{padding-right:3.2rem}.num.post::after{content:attr(data-unit);position:absolute;right:.75rem;top:50%;transform:translateY(-50%);color:var(--muted);font-weight:600;pointer-events:none}
+.hint{display:block;font-weight:400;font-size:.85rem;color:var(--muted);margin-top:.3rem}
+.helper{margin:-.3rem 0 1rem;border:1px solid var(--border);border-radius:.45rem;background:#fffaf0}
+.helper summary{cursor:pointer;padding:.6rem .85rem;font-weight:600;font-size:.92rem;color:var(--accent-ink)}.helper[open] summary{border-bottom:1px solid var(--border)}
+.helper-body{padding:.4rem .85rem .9rem;font-size:.92rem}.helper-body p{margin:.6rem 0}
+.months{display:grid;grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr));gap:.2rem .7rem}.months label{margin:.3rem 0;font-size:.82rem;font-weight:600}.months input{padding:.45rem .6rem .45rem 1.6rem}.months .num.pre::before{left:.6rem}
+.months-total{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;margin-top:.8rem!important}.months-total b{font-variant-numeric:tabular-nums;font-size:1.05rem}
+button.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink);padding:.45rem .8rem;font-size:.88rem}
+.howto{list-style:none;padding:0;margin:0;counter-reset:h;display:grid;gap:.7rem;max-width:52rem}
+.howto li{counter-increment:h;background:var(--surface);border:1px solid var(--border);border-radius:.5rem;padding:1rem 1.2rem 1rem 3.6rem;position:relative;display:flex;flex-direction:column;gap:.2rem}
+.howto li::before{content:counter(h);position:absolute;left:1.1rem;top:1rem;width:1.7rem;height:1.7rem;border-radius:50%;background:var(--ink);color:var(--accent);display:grid;place-items:center;font-weight:700;font-size:.9rem}
+.howto span{color:var(--muted)}

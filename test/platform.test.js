@@ -19,7 +19,7 @@ const formValues={
   'jubilacheck':{aportes:'30',objetivo:'120'},
   'creditocheck':{capital:'500',cuotaA:'300',cuotaB:'290',plazoA:'2',plazoB:'2',cargoA:'10',cargoB:'5'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
-  'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',superficie:'0',energia:'0',alquileres:'0',precio:'0',billeteras:'si'},
+  'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',billeteras:'si'},
   'importafacil':{mercaderia:'100',flete:'20',seguro:'5',cambio:'1000',cargos:'1000'},
   'mi-partida':{zona:'Córdoba',tipo:'nacimiento',anio:'1980'},
   'apostilla-express':{documento:'Acta',destino:'España',emisor:'Registro Civil'},
@@ -77,7 +77,7 @@ test('MonotributoCheck: categoría por parámetro, margen, exclusión y resumen 
   assert.match(up,/quedás a \$ 3\.128\.651,43 del tope de la categoría D/);
   assert.match(up,/ARCA cruza/);
   assert.match(text({categoria:'D',ingresos:'20000000',diciembre:'1000000',billeteras:'no'}),/podés facturar hasta \$ 10\.628\.651,43/);
-  assert.match(text({categoria:'A',ingresos:'9000000',diciembre:'800000',superficie:'50'}),/subís de la categoría A a la C[\s\S]*define el parámetro más alto: superficie/);
+  assert.match(text({categoria:'A',ingresos:'9000000',diciembre:'800000',local:'si',superficie:'50'}),/subís de la categoría A a la C[\s\S]*define el parámetro más alto: superficie/);
   assert.match(text({categoria:'E',ingresos:'9000000',diciembre:'800000'}),/bajás de la categoría E a la A/);
   assert.match(text({categoria:'C',ingresos:'20000000',diciembre:'1000000'}),/No tenés que recategorizarte: seguís en la categoría C/);
   assert.match(text({ingresos:'130000000'}),/fuera del Monotributo[\s\S]*supera el máximo de la categoría K/);
@@ -85,6 +85,13 @@ test('MonotributoCheck: categoría por parámetro, margen, exclusión y resumen 
   assert.match(text({actividad:'servicios',precio:'800000',ingresos:'20000000',diciembre:'1000000'}),/seguís en la categoría C/);
   assert.match(text({actividad:'bienes',categoria:'D',ingresos:'20000000',diciembre:'1000000'}),/\$ 82\.564,81 por mes/);
   assert.throws(()=>evaluate(mono,{...base,categoria:'Z'}),/opción válida/);
+  // Formato argentino y campos que dependen de otra respuesta
+  assert.equal(evaluate(mono,{...base,ingresos:'25.000.000',diciembre:'2.500.000,00'}).input.ingresos,25000000);
+  assert.equal(evaluate(mono,{...base,diciembre:'1.234,56'}).input.diciembre,1234.56);
+  assert.equal(evaluate(mono,{...base,local:'no',superficie:'500'}).input.superficie,0);
+  assert.equal(evaluate(mono,{...base,local:'si',superficie:'500'}).input.superficie,500);
+  assert.equal(evaluate(mono,{...base,actividad:'servicios',precio:'999999999'}).input.precio,0);
+  assert.throws(()=>evaluate(mono,{...base,ingresos:'abc'}),/Ejemplo: 1\.250\.000,50/);
   const preview=mono.teaser(evaluate(mono,base).lines);
   assert.equal(preview.facts[0][1],'Sí, tenés que recategorizarte (subís de categoría).');
   assert.doesNotMatch(JSON.stringify(preview),/categoría D|84\.612/);
@@ -149,12 +156,12 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,5);
+  assert.equal(markup.match(/href="\/guias\//g).length,6);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/data-card|Reclamo a una|Mi cuenta|Servicio completo pendiente/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,7);
+  assert.equal(sitemap.match(/<loc>/g).length,8);
   for(const hidden of ['/servicios/consumo-defensa','/reclamos/vuelo-cancelado','/servicios/multaradar','/cuenta','/guias/vuelo-cancelado']) assert.equal((await get(hidden)).status,404);
   const landing=await (await get('/guias/'+guide)).text();
   assert.match(landing,/Cuánto podés facturar en diciembre/);

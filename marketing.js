@@ -80,7 +80,7 @@ for (const slug of ['consumo-defensa', 'envio-reclamo', 'vuelo-reclamo']) Object
 pitch.monotributocheck = {
   title: 'Recategorización del Monotributo',
   tagline: 'Sabé si te tenés que recategorizar antes del 5 de febrero, en qué categoría quedás y cuánto podés facturar en diciembre.',
-  placeholders: { ingresos: 'Ej.: 22000000', diciembre: 'Ej.: 2000000' },
+  placeholders: { ingresos: 'Ej.: 22.000.000', diciembre: 'Ej.: 2.000.000', superficie: 'Ej.: 30', energia: 'Ej.: 3.300', alquileres: 'Ej.: 2.400.000', precio: 'Ej.: 150.000' },
   includes: [
     'Tu categoría exacta, analizada parámetro por parámetro',
     'La cuota nueva y cuánto cambia en el semestre',
@@ -115,6 +115,15 @@ export const site = {
 
 export const cases = [
   ...reclamosCases,
+  { path: 'como-recategorizarse-en-arca-paso-a-paso', service: 'monotributocheck', title: 'Cómo recategorizarte en ARCA, paso a paso', intro: 'El trámite se hace online con tu clave fiscal y lleva unos 10 minutos. Antes de empezar, calculá qué categoría te corresponde: si no cambia, no tenés que hacer nada.', points: ['El plazo vence el 5 de febrero de 2027.', 'Se toma lo facturado de enero a diciembre de 2026, más superficie, luz y alquileres si tenés local.', 'Si no te recategorizás y correspondía, ARCA puede hacerlo de oficio y aplicar multas.'], steps: [
+    ['Calculá tu categoría', 'Sumá lo facturado de enero a diciembre de 2026 y, si tenés local, superficie, kWh de luz y alquileres. La categoría la define el parámetro más alto. Si es la misma que tenés, terminaste.'],
+    ['Entrá a ARCA', 'Ingresá a arca.gob.ar con tu CUIT y clave fiscal (nivel 2 o superior).'],
+    ['Abrí el Portal Monotributo', 'En tus servicios elegí «Monotributo». Si no aparece, adherilo desde el Administrador de Relaciones de Clave Fiscal.'],
+    ['Elegí «Recategorizarme»', 'Está en el menú principal del Portal Monotributo, disponible hasta el vencimiento.'],
+    ['Cargá los datos', 'Confirmá los ingresos brutos de los últimos 12 meses y, si corresponde, superficie, energía eléctrica y alquileres. ARCA puede traer valores precargados: revisalos.'],
+    ['Revisá y confirmá', 'El sistema te muestra la nueva categoría y la cuota. Si coincide con tu cálculo, confirmá.'],
+    ['Guardá el comprobante', 'Descargá la constancia de la recategorización y la nueva credencial de pago. La cuota nueva se paga desde el período febrero.']
+  ] },
   { path: 'recategorizacion-monotributo-febrero-2027', service: 'monotributocheck', title: 'Recategorización del Monotributo: febrero 2027', intro: 'La recategorización vence el 5 de febrero de 2027 y toma lo facturado de enero a diciembre de 2026. Calculá si cambiás de categoría y cuánto vas a pagar.', points: ['Se analiza lo facturado en los últimos 12 meses y, si tenés local, superficie, energía y alquileres.', 'La categoría la define el parámetro más alto.', 'Si tu categoría no cambia, no tenés que hacer ningún trámite.'] },
   { path: 'cuanto-puedo-facturar-en-diciembre-monotributo', service: 'monotributocheck', title: '¿Cuánto podés facturar en diciembre sin cambiar de categoría?', intro: 'Diciembre cierra el año que ARCA mira para la recategorización de febrero. Calculá cuánto margen te queda antes del tope de tu categoría.', points: ['El margen es el tope anual de tu categoría menos lo facturado de enero a noviembre.', 'Los topes se actualizan por inflación en enero: el margen real suele ser algo mayor.', 'Si te pasás, la recategorización es obligatoria.'] },
   { path: 'me-recategorizaron-de-oficio', service: 'monotributocheck', title: 'ARCA te recategorizó de oficio', intro: 'Si ARCA te cambió de categoría y creés que se equivocó, primero confirmá qué categoría te corresponde con tus números reales.', points: ['ARCA cruza datos de cobros en cuentas y billeteras para recategorizar de oficio.', 'Podés reclamar desde el Portal Monotributo con la documentación que respalde tus ingresos.', 'El informe te deja por escrito la categoría que te corresponde y por qué.'] },

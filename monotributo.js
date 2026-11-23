@@ -120,15 +120,17 @@ export function evaluateMonotributo(x) {
   return lines.filter(Boolean);
 }
 
+const LOCAL = { no: { label: 'No, trabajo sin local (desde casa, en la calle, online)' }, si: { label: 'Sí, tengo local, oficina o depósito' } };
 export const monotributoFields = num => [
   choice('actividad', '¿A qué te dedicás?', ACTIVIDAD),
   choice('categoria', 'Tu categoría actual', CATEGORIAS),
-  num('ingresos', 'Lo que facturaste de enero a noviembre de 2026 (en pesos)'),
-  num('diciembre', 'Lo que pensás facturar en diciembre (en pesos)'),
-  num('superficie', 'Superficie del local u oficina, en m2 (0 si no tenés)'),
-  num('energia', 'Energía eléctrica del local en el año, en kWh (0 si no tenés)'),
-  num('alquileres', 'Alquileres que pagaste por el local en el año (0 si no pagás)'),
-  num('precio', 'Si vendés productos: el precio unitario más alto (0 si das servicios)'),
+  { ...num('ingresos', 'Lo que facturaste de enero a noviembre de 2026'), unit: 'pesos', help: 'meses' },
+  { ...num('diciembre', 'Lo que pensás facturar en diciembre'), unit: 'pesos', hint: 'Una estimación alcanza. Si no vas a facturar, poné 0.' },
+  choice('local', '¿Tenés un local para la actividad?', LOCAL),
+  { ...num('superficie', 'Superficie del local'), unit: 'm²', show: 'local:si' },
+  { ...num('energia', 'Luz que consumió el local en el año'), unit: 'kWh', show: 'local:si', hint: 'Sumá los kWh de las facturas de luz del local de 2026.' },
+  { ...num('alquileres', 'Alquiler que pagaste por el local en el año'), unit: 'pesos', show: 'local:si', hint: 'Si el local es tuyo, poné 0.' },
+  { ...num('precio', 'Precio del producto más caro que vendés'), unit: 'pesos', show: 'actividad:bienes' },
   choice('billeteras', '¿Cobrás en billeteras o transferencias sin facturar?', SINO)
 ];
 

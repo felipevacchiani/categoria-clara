@@ -13,9 +13,17 @@ const items = (value, separator = '|', columns = 2) => {
   check(rows.length <= 30 && rows.every(row => row.length === columns && row.every(Boolean)), 'Revisá el formato y el límite de 30 filas.');
   return rows;
 };
+// Acepta formato argentino (1.250.000,50) y también 1250000.50.
+export const parseAmount = raw => {
+  let v = String(raw ?? '').replace(/[\s$]/g, '');
+  if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g, '');
+  return v;
+};
 const amount = value => {
-  check(/^\d{1,12}(\.\d{1,2})?$/.test(value), 'Usá números positivos o cero, con punto decimal.');
-  return Math.round(Number(value)*100);
+  const v = parseAmount(value);
+  check(/^\d{1,12}(\.\d{1,2})?$/.test(v), 'Usá números positivos o cero. Ejemplo: 1.250.000,50');
+  return Math.round(Number(v)*100);
 };
 const total = values => values.reduce((sum,value) => sum+value,0);
 const group = ['Vehículos y movilidad','Trabajo y finanzas','Impuestos y documentación','Viajes y ciudadanía','Hogar y derechos'];
@@ -85,7 +93,8 @@ const entries = [
 export const services = entries.map(([slug,name,g,description,fields,engine,blocker,sellable=false,version='1.0.0']) => ({slug,name,category:group[g],description,fields,engine,blocker,sellable,version}));
 export const getService = slug => services.find(service => service.slug===slug);
 export function evaluate(service, values) {
-  const input = Object.fromEntries(service.fields.map(({key,type,label,options})=>{
+  const input = Object.fromEntries(service.fields.map(({key,type,label,options,show})=>{
+    if(show){const [k,v]=show.split(':'); if(values[k]?.trim()!==v) return [key,type==='number'?0:''];}
     const value=values[key]?.trim();
     check(value&&value.length<=(type==='textarea'?2400:120),`Completá el campo «${label}» dentro del límite indicado.`);
     if(type==='select') check(options.some(o=>o.value===value),`Elegí una opción válida en «${label}».`);

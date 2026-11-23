@@ -260,10 +260,23 @@ function fieldHtml(f,value='',placeholder='') {
   let control;
   if(f.type==='select') control=`<select name="${f.key}" required><option value="">Elegí una opción</option>${f.options.map(o=>`<option value="${esc(o.value)}"${o.value===value?' selected':''}>${esc(o.label)}</option>`).join('')}</select>`;
   else if(f.type==='textarea') control=`<textarea name="${f.key}" maxlength="2400" required${ph}>${esc(value)}</textarea>`;
-  else if(f.type==='number') control=`<input name="${f.key}" type="number" ${f.key==='plazo'?'min="1" max="30" step="1"':'min="0" max="999999999999.99" step="0.01"'} value="${esc(value)}" required${ph}>`;
+  else if(f.type==='number'&&f.key==='plazo') control=`<input name="${f.key}" type="number" min="1" max="30" step="1" value="${esc(value)}" required${ph}>`;
+  else if(f.type==='number') {
+    const unit=f.unit==='pesos'?'$':f.unit||'';
+    const input=`<input name="${f.key}" type="text" inputmode="decimal" autocomplete="off" maxlength="20" data-num="${f.unit==='pesos'?'money':'qty'}" value="${esc(value)}" required${ph}>`;
+    control=unit?`<span class="num ${f.unit==='pesos'?'pre':'post'}" data-unit="${esc(unit)}">${input}</span>`:input;
+  }
   else control=`<input name="${f.key}" type="${f.type}" ${f.type==='text'?'maxlength="120"':''} value="${esc(value)}" required${ph}>`;
-  return `<label>${esc(f.label)}${control}</label>`;
+  const hint=f.hint?`<span class="hint">${esc(f.hint)}</span>`:'';
+  const show=f.show?` data-show="${esc(f.show)}"`:'';
+  return `<label${show}>${esc(f.label)}${control}${hint}</label>${f.help==='meses'?monthsHelp(f.key):''}`;
 }
+const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre'];
+const monthsHelp=target=>`<details class="helper"><summary>¿No sabés cuánto facturaste? Te ayudamos</summary>
+<div class="helper-body"><p><b>Dónde verlo en ARCA:</b> entrá con tu clave fiscal a <b>Mis Comprobantes</b> → <b>Emitidos</b>, elegí del 01/01/2026 al 30/11/2026 y buscá. Sumá la columna <b>Imp. Total</b> (o descargala en Excel). Las notas de crédito restan.</p>
+<p><b>O cargalo mes a mes</b> y lo sumamos por vos:</p>
+<div class="months" data-sum-into="${esc(target)}">${MESES.map(m=>`<label>${m}<span class="num pre" data-unit="$"><input type="text" inputmode="decimal" autocomplete="off" data-num="money" data-month placeholder="0"></span></label>`).join('')}</div>
+<p class="months-total">Total: <b data-sum-total>$ 0</b> <button type="button" class="ghost" data-sum-apply>Usar este total</button></p></div></details>`;
 function renderLines(lines) {
   let html='',list=null;
   const close=()=>{if(list){html+=`</${list}>`;list=null;}};
@@ -365,8 +378,8 @@ async function route(req,res) {
     event('view_item',s.slug,undefined,'ficha');
     const defaults={envio:today(),plazo:'10'};
     return show(info.title,`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">${esc(s.name)}</p><h1>${esc(info.title)}</h1><p class="lead">${esc(info.tagline)}</p></div>
-    <div class="svc-grid"><section class="panel"><h2>${s.teaser?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${s.teaser?'No te pedimos clave fiscal ni datos personales. Usá montos en pesos, sin puntos de miles.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
-    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(s.teaser?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}</section>
+    <div class="svc-grid"><section class="panel"><h2>${s.teaser?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${s.teaser?'No te pedimos clave fiscal ni datos personales. Escribí los montos como siempre: 1.250.000,50.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
+    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(s.teaser?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}${s.slug==='monotributocheck'?'<p class="muted small">¿Ya sabés tu categoría y querés hacer el trámite? <a href="/guias/como-recategorizarse-en-arca-paso-a-paso">Mirá el instructivo paso a paso</a>.</p>':''}</section>
     <aside class="panel aside"><h2>Qué recibís</h2>${checks(info.includes)}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves la vista previa gratis y pagás solo si querés el PDF.</p>`:''}${mock(s,info)}<p class="muted small">Fuente: <a href="${esc(sourceUrl)}">${esc(sourceName)}</a></p></aside></div>
     ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:info.tagline,jsonld:[serviceLd(info.title,info.tagline,path,cents),faqLd(info)]});
   }
@@ -385,7 +398,7 @@ async function route(req,res) {
     <div class="svc-grid"><section class="panel"><h2>${caso?'Armá tu reclamo':'Calculá tu caso'}</h2><p class="muted">${caso?'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.':'No te pedimos clave fiscal ni datos personales.'}</p>
     ${post(pathFor(s),`<input type="hidden" name="origen" value="${esc(landing.path)}">`+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?'Ver resultado gratis':'Ver resultado'}</button>`)}</section>
     <aside class="panel aside">${aside}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves el resultado gratis y pagás solo si querés el informe completo.</p>`:''}</aside></div>
-    ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:landing.intro,jsonld:[serviceLd(landing.title,landing.intro,path,cents),faqLd(info)]});
+    ${landing.steps?`<section class="block"><h2>Paso a paso en ARCA</h2><ol class="howto">${landing.steps.map(([t,d])=>`<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ol></section>`:''}${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,description:landing.intro,jsonld:[serviceLd(landing.title,landing.intro,path,cents),faqLd(info)]});
   }
   if(method==='POST'&&path==='/eventos/inicio'){
     limit(req,'beacon',120);

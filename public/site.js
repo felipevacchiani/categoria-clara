@@ -50,3 +50,64 @@ if(waiting){
     location.reload();
   }, 5000);
 }
+
+// --- Números con formato argentino: 1.250.000,50 ---
+const parseAR = text => {
+  const [int = '', dec] = String(text).replace(/[^\d,]/g, '').split(',');
+  return Number((int || '0') + (dec ? '.' + dec.slice(0, 2) : '')) || 0;
+};
+const formatAR = (text, decimals) => {
+  let clean = String(text).replace(/[^\d,]/g, '');
+  const comma = clean.indexOf(',');
+  let int = comma < 0 ? clean : clean.slice(0, comma);
+  let dec = comma < 0 ? null : clean.slice(comma + 1).replace(/,/g, '').slice(0, decimals ? 2 : 0);
+  int = int.replace(/^0+(?=\d)/, '');
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return decimals && dec !== null ? grouped + ',' + dec : grouped;
+};
+const money = n => '$ ' + n.toLocaleString('es-AR', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
+for (const input of document.querySelectorAll('input[data-num]')) {
+  const decimals = input.dataset.num === 'money';
+  if (input.value && /^\d+(\.\d{1,2})?$/.test(input.value)) input.value = formatAR(input.value.replace('.', ','), decimals);
+  input.addEventListener('input', () => {
+    const fromEnd = input.value.length - (input.selectionStart ?? input.value.length);
+    input.value = formatAR(input.value, decimals);
+    const pos = Math.max(0, input.value.length - fromEnd);
+    try { input.setSelectionRange(pos, pos); } catch {}
+  });
+}
+
+// --- Campos que dependen de otra respuesta (local, venta de productos) ---
+const toggles = [...document.querySelectorAll('[data-show]')];
+const refreshToggles = () => {
+  for (const label of toggles) {
+    const form = label.closest('form');
+    const [key, value] = label.dataset.show.split(':');
+    const visible = form?.elements[key]?.value === value;
+    const wasHidden = label.hidden;
+    label.hidden = !visible;
+    for (const input of label.querySelectorAll('input,select')) {
+      input.required = visible;
+      if (!visible) input.value = '0';
+      else if (wasHidden && input.value === '0') input.value = '';
+    }
+  }
+};
+document.addEventListener('change', e => { if (e.target.matches('select')) refreshToggles(); });
+refreshToggles();
+
+// --- Calculadora mes a mes ---
+for (const box of document.querySelectorAll('[data-sum-into]')) {
+  const target = box.closest('form').elements[box.dataset.sumInto];
+  const wrap = box.closest('.helper-body');
+  const totalEl = wrap.querySelector('[data-sum-total]');
+  const sum = () => [...box.querySelectorAll('[data-month]')].reduce((t, i) => t + parseAR(i.value), 0);
+  box.addEventListener('input', () => { totalEl.textContent = money(sum()); });
+  wrap.querySelector('[data-sum-apply]').addEventListener('click', () => {
+    const total = sum();
+    target.value = formatAR(total.toFixed(2).replace('.', ',').replace(/,00$/, ''), true);
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    box.closest('details').open = false;
+    target.focus();
+  });
+}

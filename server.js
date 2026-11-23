@@ -214,6 +214,23 @@ async function reconcile(paymentId) {
   acceptPayment(payment,order);
   return true;
 }
+// Consulta activa a Mercado Pago: no depender solo del webhook.
+const lastSync=new Map();
+async function syncOrder(order){
+  if(!order||order.state!=='pending'||order.mode!==mode||!token) return false;
+  const now=Date.now();
+  if((lastSync.get(order.id)||0)>now-15000) return false;
+  lastSync.set(order.id,now);
+  const found=await mp(token,'/v1/payments/search?external_reference='+encodeURIComponent(order.id)+'&sort=date_created&criteria=desc');
+  let changed=false;
+  for(const p of (found.results||[]).slice(0,10)) if(await reconcile(String(p.id)).catch(()=>false)) changed=true;
+  return changed;
+}
+async function sweepPending(){
+  const since=new Date(Date.now()-3*86400000).toISOString();
+  for(const order of all("SELECT * FROM orders WHERE state='pending' AND mode=? AND created>? ORDER BY created DESC LIMIT 50",mode,since))
+    await syncOrder(order).catch(()=>console.error('Error al consultar un pago pendiente'));
+}
 function sendMail(to,subject,text,id) {
   const headers={Authorization:'Bearer '+env.RESEND_KEY,'Content-Type':'application/json'};
   if(id) headers['Idempotency-Key']=id;
@@ -258,6 +275,7 @@ async function deliver() {
   } finally {delivering=false;}
 }
 setInterval(()=>deliver().catch(()=>console.error('Error en cola de correo')),15000).unref();
+if(!process.argv[2]&&env.NODE_ENV!=='test') setInterval(()=>sweepPending().catch(()=>console.error('Error en el barrido de pagos')),120000).unref();
 if(!process.argv[2]) setInterval(()=>{try {purge();} catch {console.error('Error en la depuración');}},3600000).unref();
 function noteBlock(order) {
   let lines;
@@ -385,7 +403,7 @@ async function route(req,res) {
   if(!['GET','POST'].includes(method)) return plain(res,405,'Método no permitido');
   if(method==='POST'&&path==='/webhooks/mercadopago'){
     const paymentId=url.searchParams.get('data.id');
-    if(!validSignature(env.MP_WEBHOOK_SECRET,paymentId,req.headers)) return plain(res,401,'Firma inválida');
+    if(!validSignature(env.MP_WEBHOOK_SECRET,paymentId,req.headers)){console.warn('Webhook de Mercado Pago con firma inválida (revisar la clave secreta del modo '+mode+')');return plain(res,401,'Firma inválida');}
     if(url.searchParams.has('type')&&url.searchParams.get('type')!=='payment') return plain(res,200,'Evento fuera de alcance');
     try {await reconcile(paymentId);return plain(res,200,'Recibido');}
     catch {return plain(res,503,'Reintentar más tarde');}
@@ -697,6 +715,12 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     const order=one('SELECT * FROM orders WHERE access_digest=?',hash(secret));
     if(!order) fail(404,'No encontramos esa compra. Revisá el enlace o pedilo de nuevo desde «Mis informes».');
     const subpath=orderRoute[2];
+    if(method==='GET'&&order.state==='pending'){
+      const back=url.searchParams.get('payment_id')||url.searchParams.get('collection_id');
+      if(back&&/^\d{1,24}$/.test(back)) await reconcile(back).catch(()=>false);
+      else await syncOrder(order).catch(()=>false);
+      Object.assign(order,one('SELECT * FROM orders WHERE id=?',order.id));
+    }
     const self='/p/'+secret;
     if(method==='GET'&&subpath==='/pdf'){
       if(order.purged_at) fail(410,'El contenido de este pedido se eliminó por la política de conservación de datos.');

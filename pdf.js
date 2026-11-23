@@ -3,10 +3,10 @@
 // Interfaz estable: pdf(title, lines) -> Buffer.
 
 const W = 595, H = 842, M = 54, CW = W - 2 * M, BOTTOM = 74;
-const NAVY = [0.063, 0.176, 0.278], TEAL = [0.145, 0.769, 0.651], DTEAL = [0, 0.467, 0.388];
-const INK = [0.13, 0.16, 0.2], MUTED = [0.314, 0.388, 0.471], SOFT = [0.969, 0.976, 0.988];
-const RULE = [0.863, 0.898, 0.925], AMBER = [0.878, 0.643, 0.227], AMBER_BG = [1, 0.969, 0.902];
-const BAND_TEXT = [0.86, 0.925, 0.94];
+const NAVY = [0.086, 0.094, 0.114], TEAL = [0.918, 0.647, 0.227], DTEAL = [0.541, 0.353, 0.047];
+const INK = [0.086, 0.094, 0.114], MUTED = [0.361, 0.373, 0.408], SOFT = [0.965, 0.949, 0.918];
+const RULE = [0.890, 0.859, 0.804], AMBER = [0.878, 0.643, 0.227], AMBER_BG = [1, 0.969, 0.902];
+const BAND_TEXT = [0.85, 0.82, 0.77];
 const FONT = { R: 'F1', B: 'F2', I: 'F3' };
 
 // Anchos AFM (1/1000 em) de Helvetica y Helvetica-Bold para ASCII 32..126.

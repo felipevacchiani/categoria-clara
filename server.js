@@ -78,6 +78,43 @@ const cookie=(value,age)=>`ry=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=
 const admin=user=>Boolean(user&&one('SELECT 1 FROM admins WHERE user_id=?',user.id));
 const link=(href,label)=>`<a class="button" href="${esc(href)}">${esc(label)}</a>`;
 const post=(url,inner)=>`<form method="post" action="${esc(url)}">${inner}</form>`;
+async function jsonBody(req,max=1048576){
+  if(req.headers.origin!==origin||!req.headers['content-type']?.startsWith('application/json')) fail(403,'Solicitud inválida.');
+  const chunks=[];let size=0;
+  for await(const chunk of req){size+=chunk.length;if(size>max) fail(413,'Demasiados datos de una vez.');chunks.push(chunk);}
+  try {return JSON.parse(Buffer.concat(chunks).toString()||'{}');} catch {fail(400,'Datos inválidos.');}
+}
+const sendJson=(res,data,code=200)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
+const EMAIL=/^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+async function startSession(res,account,days=30){
+  const session=randomBytes(32).toString('hex');
+  sql('DELETE FROM sessions WHERE expires<=?',Date.now());
+  sql('INSERT INTO sessions VALUES (?,?,?)',hash(session),account.id,Date.now()+days*86400000);
+  res.setHeader('Set-Cookie',cookie(session,days*86400));
+}
+async function checkPassword(account,candidatePlain){
+  const usable=account&&account.password&&account.password!=='!';
+  const stored=usable?account.password:'0'.repeat(32)+':'+'0'.repeat(128);
+  const candidate=await password(String(candidatePlain||'').slice(0,128),stored.split(':')[0]);
+  return usable&&stored.length===candidate.length&&timingSafeEqual(Buffer.from(stored),Buffer.from(candidate));
+}
+function portalData(account){
+  const perfil=one('SELECT actividad,categoria FROM portal_profiles WHERE user_id=?',account.id)||{actividad:'servicios',categoria:''};
+  const facturas=all('SELECT id,fecha,tipo,cents,detail FROM invoices WHERE user_id=? ORDER BY fecha DESC,created DESC',account.id).map(r=>{
+    let d={};try{d=JSON.parse(unseal(r.detail).toString());}catch{}
+    return {id:r.id,fecha:r.fecha,tipo:r.tipo,monto:r.cents/100,numero:d.numero||'',cliente:d.cliente||''};
+  });
+  return {email:account.email,perfil,facturas};
+}
+const ISO=/^\d{4}-\d{2}-\d{2}$/;
+function cleanInvoice(f){
+  const fecha=String(f?.fecha||'');
+  const cents=Math.round(Number(f?.monto)*100);
+  if(!ISO.test(fecha)||!Number.isFinite(Date.parse(fecha))||fecha<'2015-01-01'||fecha>'2100-01-01') return null;
+  if(!Number.isSafeInteger(cents)||cents<=0||cents>100000000000) return null;
+  return {fecha,tipo:f.tipo==='NC'?'NC':'F',cents,numero:String(f.numero||'').slice(0,40),cliente:String(f.cliente||'').slice(0,80),key:f.key?String(f.key).slice(0,200):null};
+}
+
 const button=label=>`<button type="submit">${esc(label)}</button>`;
 function page(res, title, body, {user,status=200,canonical,description='Armá tu reclamo a una empresa, un envío o una aerolínea con la normativa argentina que aplica.',jsonld}={}) {
   res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':canonical&&!user?'public, max-age=60':'private, no-store','Vary':'Cookie'});
@@ -330,10 +367,16 @@ async function route(req,res) {
   if(method==='GET'&&path==='/robots.txt') return plain(res,200,env.INDEX_PUBLIC==='1'?`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /pedido/\nSitemap: ${origin}/sitemap.xml\n`:'User-agent: *\nDisallow: /\n');
   if(method==='GET'&&path==='/tabla.json'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=3600'});return res.end(JSON.stringify({id:MONO_TABLE.id,vigencia:MONO_TABLE.vigencia,categorias:MONO_TABLE.categorias.map(({cat,ingresos})=>({cat,ingresos})),recategorizacion:RECATEGORIZACION}));}
   if(method==='GET'&&path==='/mi-facturacion'){
-    event('view_item','portal',undefined,'portal');
+    event('view_item','portal',undefined,user?'portal':'portal-login');
+    const head=`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">Gratis</p><h1>Mi facturación</h1><p class="lead">Cargá tus facturas a medida que las hacés y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías en la próxima recategorización.</p></div>`;
+    if(!user) return show('Mi facturación',head+`<div class="svc-grid auth">
+<section class="panel"><h2>Creá tu cuenta</h2><p class="muted small">Gratis. Solo tu correo y una contraseña. Nunca te pedimos clave fiscal.</p>
+${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetí la contraseña<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button>Crear cuenta</button>`)}</section>
+<aside class="panel aside"><h2>Ya tengo cuenta</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}
+<h3>Qué vas a poder hacer</h3>${checks(['Cargar facturas y notas de crédito, o importar el CSV de Mis Comprobantes','Ver cuánto llevás facturado y en qué categoría quedarías','Saber cuánto te falta para el tope de tu categoría','Tener todo guardado y verlo desde el celu o la compu'])}</aside></div>`,{canonical:'/mi-facturacion',description:'Cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría del Monotributo quedarías. Gratis.'});
     const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
-    return show('Mi facturación',`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">Gratis · sin cuenta</p><h1>Mi facturación</h1><p class="lead">Cargá tus facturas a medida que las hacés y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías en la próxima recategorización.</p></div>
-<div id="portal">
+    return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>
+<div id="portal" data-account="1"><div id="migrate" class="panel wide note-box" hidden><p id="migrate-txt"></p><button type="button" id="migrate-btn">Pasarlos a mi cuenta</button> <button type="button" class="link" id="migrate-skip">No, gracias</button></div>
 <section class="kpis">
   <div class="kpi"><span>Facturado en el período</span><b id="k-total">$ 0,00</b><small id="k-periodo"></small></div>
   <div class="kpi accent"><span>Por ingresos te corresponde</span><b id="k-cat">…</b><small id="k-cat-note"></small></div>
@@ -353,14 +396,90 @@ async function route(req,res) {
   <label class="file">Subir CSV de Mis Comprobantes<input id="csv" type="file" accept=".csv,text/csv"></label><p id="csv-msg" class="small" role="status"></p>
 </section>
 <aside class="panel aside"><h2>¿Querés el informe completo?</h2><p class="small">Esto mira solo tus ingresos. El informe suma superficie, luz y alquileres, te calcula la cuota nueva, las alertas y el paso a paso, en PDF.</p><a id="to-report" class="button" href="/servicios/monotributocheck">Pasar mis números al informe</a><p id="to-report-note" class="small muted"></p>
-<h3>Tus datos son tuyos</h3><p class="small muted">Todo queda guardado solo en este navegador: no lo vemos ni lo guardamos. Descargá un respaldo para no perderlo o pasarlo a otra compu.</p>
-<div class="btns"><button type="button" class="ghost" id="export">Descargar respaldo</button><label class="file ghost-file">Restaurar respaldo<input id="import" type="file" accept=".json,application/json"></label></div><p id="backup-msg" class="small" role="status"></p>
+<h3>Tu cuenta</h3><p class="small muted">Tus comprobantes quedan guardados en tu cuenta, cifrados, y los ves desde cualquier dispositivo. Podés descargarlos o borrarlos cuando quieras.</p>
+<div class="btns"><button type="button" class="ghost" id="export">Descargar respaldo</button><label class="file ghost-file">Subir respaldo<input id="import" type="file" accept=".json,application/json"></label></div><p id="backup-msg" class="small" role="status"></p>
 <p class="small"><a href="/guias/como-hacer-factura-c-arca">¿Cómo se hace una factura en ARCA?</a></p></aside>
 </div>
 <section class="panel wide"><div class="list-head"><h2>Tus comprobantes</h2><span id="count" class="muted small"></span><button type="button" class="link" id="wipe">Borrar todo</button></div>
 <p id="empty" class="muted">Todavía no cargaste comprobantes.</p>
 <div class="table"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Número</th><th>Cliente</th><th class="right">Monto</th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
-</div><script src="/portal.js" defer></script>`,{canonical:'/mi-facturacion',description:'Cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría del Monotributo quedarías. Gratis y sin cuenta.'});
+</div><script src="/portal.js" defer></script>
+<details class="danger"><summary>Eliminar mi cuenta</summary>${post('/cuenta/eliminar',`<p class="small">Se borran tu cuenta y todos tus comprobantes. No se puede deshacer. Escribí <b>ELIMINAR</b> para confirmar.</p><label>Confirmación<input name="confirm" maxlength="10" required></label><button>Eliminar cuenta y datos</button>`)}</details>`,{canonical:'/mi-facturacion'});
+  }
+  if(method==='POST'&&path==='/cuenta/crear'){
+    limit(req,'identity',12);
+    const input=await form(req);
+    const email=String(input.email||'').trim().toLowerCase();
+    const pass=String(input.password||'');
+    if(!EMAIL.test(email)||email.length>254) fail(422,'Revisá el correo.');
+    if(pass.length<10||pass.length>128) fail(422,'La contraseña tiene que tener entre 10 y 128 caracteres.');
+    if(pass!==String(input.password2||'')) fail(422,'Las contraseñas no coinciden.');
+    if(input.consent!==policy) fail(422,'Para crear la cuenta tenés que aceptar los términos.');
+    let account=one('SELECT * FROM users WHERE email=?',email);
+    if(account&&account.password!=='!') fail(409,'Ya existe una cuenta con ese correo. Ingresá con tu contraseña.');
+    const stored=await password(pass);
+    if(account) sql('UPDATE users SET password=? WHERE id=?',stored,account.id);
+    else {sql('INSERT INTO users VALUES (?,?,?)',randomUUID(),email,stored);}
+    account=one('SELECT * FROM users WHERE email=?',email);
+    sql('INSERT INTO policy_reads VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET version=excluded.version, created=excluded.created',account.id,policy,time());
+    event('sign_up','portal',undefined,'portal');
+    await startSession(res,account);
+    return redirect(res,'/mi-facturacion');
+  }
+  if(method==='POST'&&path==='/cuenta/ingresar'){
+    limit(req,'identity',12);
+    const input=await form(req);
+    const account=one('SELECT * FROM users WHERE email=?',String(input.email||'').trim().toLowerCase());
+    if(!(await checkPassword(account,input.password))) fail(401,'Correo o contraseña incorrectos.');
+    await startSession(res,account);
+    return redirect(res,'/mi-facturacion');
+  }
+  if(method==='POST'&&path==='/cuenta/eliminar'){
+    const input=await form(req);
+    if(!user) fail(401,'Ingresá a tu cuenta.');
+    if(String(input.confirm||'').trim()!=='ELIMINAR') fail(422,'Escribí ELIMINAR para confirmar.');
+    if(admin(user)) fail(403,'La cuenta administrativa no se elimina desde acá.');
+    atomic(db,()=>{
+      sql('DELETE FROM invoices WHERE user_id=?',user.id);
+      sql('DELETE FROM portal_profiles WHERE user_id=?',user.id);
+      sql('DELETE FROM sessions WHERE user_id=?',user.id);
+      if(one('SELECT 1 FROM orders WHERE user_id=?',user.id)) sql("UPDATE users SET password='!' WHERE id=?",user.id);
+      else {sql('DELETE FROM policy_reads WHERE user_id=?',user.id);sql('DELETE FROM users WHERE id=?',user.id);}
+    });
+    res.setHeader('Set-Cookie',cookie('',0));
+    return show('Cuenta eliminada','<h1>Cuenta eliminada</h1><section class="panel"><p>Borramos tu cuenta y tus comprobantes.</p><a href="/">Ir al inicio</a></section>');
+  }
+  if(path.startsWith('/api/facturacion')){
+    if(!user) fail(401,'Ingresá a tu cuenta.');
+    if(method==='GET'&&path==='/api/facturacion') return sendJson(res,portalData(user));
+    if(method==='POST'&&path==='/api/facturacion/perfil'){
+      const body=await jsonBody(req,4096);
+      const actividad=body.actividad==='bienes'?'bienes':'servicios';
+      const categoria=MONO_TABLE.categorias.some(c=>c.cat===body.categoria)?body.categoria:'';
+      sql('INSERT INTO portal_profiles VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET actividad=excluded.actividad,categoria=excluded.categoria,updated=excluded.updated',user.id,actividad,categoria,time());
+      return sendJson(res,{ok:true});
+    }
+    if(method==='POST'&&path==='/api/facturacion/facturas'){
+      const body=await jsonBody(req);
+      const list=Array.isArray(body.facturas)?body.facturas.slice(0,5000):[];
+      const current=one('SELECT COUNT(*) n FROM invoices WHERE user_id=?',user.id).n;
+      if(current+list.length>20000) fail(413,'Llegaste al máximo de comprobantes guardados.');
+      let added=0,skipped=0;
+      const insert=db.prepare('INSERT OR IGNORE INTO invoices VALUES (?,?,?,?,?,?,?,?)');
+      atomic(db,()=>{for(const raw of list){
+        const f=cleanInvoice(raw); if(!f){skipped++;continue;}
+        const r=insert.run(randomUUID(),user.id,f.fecha,f.tipo,f.cents,seal(JSON.stringify({numero:f.numero,cliente:f.cliente})),f.key?hash(f.key):null,time());
+        if(r.changes) added++; else skipped++;
+      }});
+      return sendJson(res,{added,skipped});
+    }
+    if(method==='POST'&&path==='/api/facturacion/borrar'){
+      const body=await jsonBody(req,4096);
+      if(body.todo===true) sql('DELETE FROM invoices WHERE user_id=?',user.id);
+      else sql('DELETE FROM invoices WHERE user_id=? AND id=?',user.id,String(body.id||''));
+      return sendJson(res,{ok:true});
+    }
+    fail(404,'No encontrado.');
   }
   if(method==='GET'&&path==='/sitemap.xml') return plain(res,200,`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['/','/mi-facturacion',...listed.map(pathFor),...visibleCases().map(caseUrl)].map(path=>`<url><loc>${esc(origin+path)}</loc></url>`).join('')}</urlset>`,'application/xml; charset=utf-8');
   if(method==='GET'&&path==='/'){
@@ -586,6 +705,7 @@ if(process.argv[2]==='admin'){
     route(req,res).catch(error=>{
       if(res.headersSent){res.destroy();return;}
       if(!error.status) console.error('Error interno:',error.code||error.name);
+      if(req.url.startsWith('/api/')){res.writeHead(error.status||500,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});return res.end(JSON.stringify({error:error.status?error.message:'No se pudo procesar la solicitud.'}));}
       page(res,error.status===404?'Página no encontrada':'Error',`<section class="panel error"><h1>${error.status||500}</h1><p>${esc(error.status?error.message:'No se pudo procesar la solicitud.')}</p><a href="/">Ir al inicio</a></section>`,{status:error.status||500});
     });
   }).listen(Number(env.PORT||3000),env.HOST||'127.0.0.1',()=>console.log('Categoría Clara en '+origin));

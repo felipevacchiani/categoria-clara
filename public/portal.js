@@ -1,4 +1,4 @@
-// Portal "Mi facturación": todo queda en el navegador (localStorage). Nada se envía al servidor.
+// Portal "Mi facturación": los comprobantes se guardan en la cuenta del usuario (API /api/facturacion).
 const root = document.querySelector('#portal');
 if (root) {
   const KEY = 'cc:facturacion:v1';
@@ -27,8 +27,21 @@ if (root) {
   };
 
   let state = { actividad: 'servicios', categoria: '', facturas: [] };
-  try { state = { ...state, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch {}
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} render(); };
+  const api = async (url, body) => {
+    const r = await fetch(url, body === undefined ? { credentials: 'same-origin' } : { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (r.status === 401) { location.reload(); throw new Error('sesión'); }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || 'No se pudo guardar. Probá de nuevo.');
+    return data;
+  };
+  const load = async () => {
+    const data = await api('/api/facturacion');
+    state = { actividad: data.perfil.actividad, categoria: data.perfil.categoria, facturas: data.facturas };
+    render();
+  };
+  const upload = async list => { const r = await api('/api/facturacion/facturas', { facturas: list }); await load(); return r; };
+  const saveProfile = () => api('/api/facturacion/perfil', { actividad: state.actividad, categoria: state.categoria }).catch(e => alertMsg('#k-bar-txt', e.message));
+  const alertMsg = (sel, text) => { const n = $(sel); if (n) n.textContent = text; };
 
   // Período que mira ARCA en la próxima recategorización (febrero y agosto).
   const periodo = (d = new Date()) => {
@@ -100,7 +113,7 @@ if (root) {
     $('#count').textContent = `${list.length} comprobante${list.length === 1 ? '' : 's'}`;
     for (const f of list.slice(0, 500)) {
       const del = el('button', { type: 'button', className: 'link', textContent: 'Borrar' });
-      del.addEventListener('click', () => { state.facturas = state.facturas.filter(x => x.id !== f.id); save(); });
+      del.addEventListener('click', async () => { del.disabled = true; try { await api('/api/facturacion/borrar', { id: f.id }); await load(); } catch (e) { del.disabled = false; alert(e.message); } });
       body.append(el('tr', {},
         el('td', { textContent: fmtDate(f.fecha) }),
         el('td', { textContent: f.tipo === 'NC' ? 'Nota de crédito' : 'Factura' }),
@@ -120,21 +133,24 @@ if (root) {
   }
 
   // Configuración
-  $('#cfg-actividad').addEventListener('change', e => { state.actividad = e.target.value; save(); });
-  $('#cfg-categoria').addEventListener('change', e => { state.categoria = e.target.value; save(); });
+  $('#cfg-actividad').addEventListener('change', e => { state.actividad = e.target.value; render(); saveProfile(); });
+  $('#cfg-categoria').addEventListener('change', e => { state.categoria = e.target.value; render(); saveProfile(); });
 
   // Alta manual
   const form = $('#add');
   form.fecha.value = new Date().toISOString().slice(0, 10);
-  form.addEventListener('submit', e => {
+  form.addEventListener('submit', async e => {
     e.preventDefault();
     const monto = num(form.monto.value);
     if (!form.fecha.value || monto <= 0) { $('#add-msg').textContent = 'Completá la fecha y un monto mayor a cero.'; return; }
-    state.facturas.push({ id: crypto.randomUUID(), fecha: form.fecha.value, tipo: form.tipo.value, numero: form.numero.value.trim().slice(0, 40), cliente: form.cliente.value.trim().slice(0, 80), monto });
-    $('#add-msg').textContent = 'Comprobante agregado.';
-    form.monto.value = ''; form.numero.value = ''; form.cliente.value = '';
-    form.monto.focus();
-    save();
+    const btn = form.querySelector('button'); btn.disabled = true;
+    try {
+      await upload([{ fecha: form.fecha.value, tipo: form.tipo.value, numero: form.numero.value.trim().slice(0, 40), cliente: form.cliente.value.trim().slice(0, 80), monto }]);
+      $('#add-msg').textContent = 'Comprobante guardado.';
+      form.monto.value = ''; form.numero.value = ''; form.cliente.value = '';
+      form.monto.focus();
+    } catch (err) { $('#add-msg').textContent = err.message; }
+    btn.disabled = false;
   });
 
   // Importar CSV de "Mis Comprobantes" (Emitidos)
@@ -152,8 +168,8 @@ if (root) {
     const cFecha = col('fecha'), cTotal = col('imp. total', 'importe total', 'total'), cTipo = col('tipo de comprobante', 'tipo'),
       cPv = col('punto de venta'), cNum = col('numero desde', 'nro', 'numero'), cRec = col('denominacion', 'receptor'),
       cMon = col('moneda'), cCambio = col('tipo cambio', 'tipo de cambio');
-    const keys = new Set(state.facturas.map(f => f.key).filter(Boolean));
-    let added = 0, skipped = 0;
+    const keys = new Set(); const nuevos = [];
+    let skipped = 0;
     for (const line of lines.slice(hi + 1)) {
       const r = splitCsv(line, d);
       const fecha = isoDate(r[cFecha] ?? ''); let monto = Math.abs(num(r[cTotal]));
@@ -166,12 +182,15 @@ if (root) {
       const key = [fecha, code || tipoTxt, numero, monto.toFixed(2)].join('|');
       if (keys.has(key)) { skipped++; continue; }
       keys.add(key);
-      state.facturas.push({ id: crypto.randomUUID(), key, fecha, tipo: nc ? 'NC' : 'F', numero, cliente: (r[cRec] ?? '').slice(0, 80), monto });
-      added++;
+      nuevos.push({ key, fecha, tipo: nc ? 'NC' : 'F', numero, cliente: (r[cRec] ?? '').slice(0, 80), monto: Math.round(monto * 100) / 100 });
     }
     e.target.value = '';
-    $('#csv-msg').textContent = `Importados ${added} comprobantes${skipped ? ` (${skipped} repetidos o sin monto, salteados)` : ''}.`;
-    save();
+    $('#csv-msg').textContent = 'Guardando…';
+    try {
+      const r = await upload(nuevos);
+      const salteados = skipped + r.skipped;
+      $('#csv-msg').textContent = `Importados ${r.added} comprobantes${salteados ? ` (${salteados} repetidos o sin monto, salteados)` : ''}.`;
+    } catch (err) { $('#csv-msg').textContent = err.message; }
   });
 
   // Respaldo
@@ -184,19 +203,34 @@ if (root) {
     const file = e.target.files[0]; if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (!Array.isArray(data.facturas)) throw 0;
-      state = { actividad: data.actividad === 'bienes' ? 'bienes' : 'servicios', categoria: String(data.categoria || ''),
-        facturas: data.facturas.filter(f => isoDate(f.fecha) && num(f.monto) > 0).map(f => ({ id: crypto.randomUUID(), key: f.key, fecha: isoDate(f.fecha), tipo: f.tipo === 'NC' ? 'NC' : 'F', numero: String(f.numero || '').slice(0, 40), cliente: String(f.cliente || '').slice(0, 80), monto: num(f.monto) })) };
-      $('#backup-msg').textContent = `Respaldo restaurado: ${state.facturas.length} comprobantes.`;
-      save();
-    } catch { $('#backup-msg').textContent = 'Ese archivo no es un respaldo válido.'; }
+      if (!Array.isArray(data.facturas)) throw new Error('Ese archivo no es un respaldo válido.');
+      const list = data.facturas.filter(f => isoDate(f.fecha) && num(f.monto) > 0).map(f => ({ key: f.key || [isoDate(f.fecha), f.tipo, f.numero, num(f.monto)].join('|'), fecha: isoDate(f.fecha), tipo: f.tipo === 'NC' ? 'NC' : 'F', numero: String(f.numero || ''), cliente: String(f.cliente || ''), monto: num(f.monto) }));
+      const r = await upload(list);
+      $('#backup-msg').textContent = `Respaldo subido: ${r.added} comprobantes nuevos.`;
+    } catch (err) { $('#backup-msg').textContent = err.message || 'Ese archivo no es un respaldo válido.'; }
     e.target.value = '';
   });
   $('#wipe').addEventListener('click', () => {
     const btn = $('#wipe');
     if (btn.dataset.confirm !== '1') { btn.dataset.confirm = '1'; btn.textContent = 'Tocá de nuevo para borrar todo'; setTimeout(() => { btn.dataset.confirm = ''; btn.textContent = 'Borrar todo'; }, 4000); return; }
-    state.facturas = []; btn.dataset.confirm = ''; btn.textContent = 'Borrar todo'; save();
+    btn.dataset.confirm = ''; btn.textContent = 'Borrar todo';
+    api('/api/facturacion/borrar', { todo: true }).then(load).catch(err => alert(err.message));
   });
 
+  // Migración: comprobantes que quedaron guardados en este navegador (versión sin cuenta)
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
+  if (local?.facturas?.length) {
+    $('#migrate').hidden = false;
+    $('#migrate-txt').textContent = `Tenés ${local.facturas.length} comprobantes guardados en este navegador. ¿Los pasamos a tu cuenta?`;
+    $('#migrate-btn').addEventListener('click', async () => {
+      try {
+        await upload(local.facturas.map(f => ({ ...f, key: f.key || [f.fecha, f.tipo, f.numero, f.monto].join('|') })));
+        localStorage.removeItem(KEY); $('#migrate').hidden = true;
+      } catch (err) { $('#migrate-txt').textContent = err.message; }
+    });
+    $('#migrate-skip').addEventListener('click', () => { localStorage.removeItem(KEY); $('#migrate').hidden = true; });
+  }
   render();
+  load().catch(err => alertMsg('#k-bar-txt', err.message));
 }

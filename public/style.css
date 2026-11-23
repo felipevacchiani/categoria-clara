@@ -96,3 +96,7 @@ label.ghost-file{background:transparent;color:var(--ink);border:1.5px solid var(
 .aside .button{width:100%;text-align:center}
 .list-head{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap}.list-head h2{margin-right:auto;margin-bottom:.4rem}
 td.right,th.right{text-align:right}td.neg{color:#a8432a}
+.account-bar{display:flex;align-items:center;gap:1rem;justify-content:flex-end;font-size:.9rem;color:var(--muted);margin:-.5rem 0 1rem}.account-bar form{max-width:none;margin:0}
+.note-box{background:var(--accent-soft);border-color:var(--accent)}
+details.danger{margin:2rem 0 0;font-size:.9rem;color:var(--muted)}details.danger summary{cursor:pointer}details.danger form{margin-top:.6rem;max-width:26rem}details.danger button{background:#a8432a}
+.auth .aside{border-top-color:var(--ink)}

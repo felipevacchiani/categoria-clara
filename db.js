@@ -16,6 +16,10 @@ export function openDatabase(path) {
   CREATE TABLE IF NOT EXISTS payments(id TEXT PRIMARY KEY,order_id TEXT NOT NULL REFERENCES orders(id),status TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS reports(order_id TEXT PRIMARY KEY REFERENCES orders(id),body BLOB NOT NULL,created TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,slug TEXT NOT NULL,created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS portal_profiles(user_id TEXT PRIMARY KEY REFERENCES users(id),actividad TEXT NOT NULL,categoria TEXT NOT NULL,updated TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS invoices(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),fecha TEXT NOT NULL,tipo TEXT NOT NULL,cents INTEGER NOT NULL,detail BLOB NOT NULL,dedupe TEXT,created TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS invoices_user ON invoices(user_id,fecha);
+  CREATE UNIQUE INDEX IF NOT EXISTS invoices_dedupe ON invoices(user_id,dedupe);
   CREATE TABLE IF NOT EXISTS withdrawals(id TEXT PRIMARY KEY,reference TEXT NOT NULL,email TEXT NOT NULL,status TEXT NOT NULL,created TEXT NOT NULL);
   `);
   const columns=db.prepare('PRAGMA table_info(orders)').all().map(column=>column.name);

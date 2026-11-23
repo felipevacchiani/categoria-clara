@@ -114,6 +114,13 @@ function takeToken(raw,purpose,consume=true){
   if(row&&consume) sql('DELETE FROM account_tokens WHERE digest=?',row.digest);
   return row?one('SELECT * FROM users WHERE id=?',row.user_id):null;
 }
+const hasPortal=account=>Boolean(account&&(admin(account)||one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',account.id)));
+function portalInvite(order){
+  const owner=one('SELECT email,password FROM users WHERE id=?',order.user_id);
+  if(!owner) return '';
+  const active=owner.password!=='!';
+  return `<div class="portal-invite"><h2>Tu portal para gestionar el Monotributo</h2><p>Con tu compra tenés acceso a <b>Mi facturación</b>: cargá tus facturas durante el año y seguí en tiempo real tu categoría y cuánto te falta para el tope.</p><a class="button" href="/mi-facturacion?email=${encodeURIComponent(owner.email)}#${active?'ingresar':'crear'}">${active?'Ir a mi portal':'Activar mi portal'}</a></div>`;
+}
 const verified=account=>Boolean(one('SELECT 1 FROM verified_emails WHERE user_id=?',account.id));
 function portalData(account){
   const perfil=one('SELECT actividad,categoria FROM portal_profiles WHERE user_id=?',account.id)||{actividad:'servicios',categoria:''};
@@ -136,7 +143,7 @@ const button=label=>`<button type="submit">${esc(label)}</button>`;
 function page(res, title, body, {user,status=200,canonical,description='Armá tu reclamo a una empresa, un envío o una aerolínea con la normativa argentina que aplica.',jsonld}={}) {
   res.writeHead(status,{'Content-Type':'text/html; charset=utf-8','Cache-Control':canonical&&!user?'public, max-age=60':'private, no-store','Vary':'Cookie'});
   res.end(`<!doctype html><html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#16181d"><title>${esc(title)} · Categoría Clara</title><meta name="description" content="${esc(description)}">${canonical?`<link rel="canonical" href="${esc(origin+canonical)}"><meta property="og:title" content="${esc(title+' · Categoría Clara')}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${esc(origin+canonical)}"><meta property="og:type" content="website"><meta property="og:locale" content="es_AR"><meta property="og:site_name" content="Categoría Clara"><meta property="og:image" content="${esc(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">${jsonld?`<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g,'\\u003c')}</script>`:''}`:'<meta name="robots" content="noindex,nofollow">'}<link rel="stylesheet" href="/style.css"><script defer src="/site.js"></script></head>
-  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a><a href="/mi-facturacion">Mi facturación</a>${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}</nav></header>
+  <body><header><nav aria-label="Principal"><a class="brand" href="/">Categoría <b>Clara</b></a>${user&&user.password!=='!'?'<a href="/mi-facturacion">Mi facturación</a>':''}${listed.map(x=>`<a href="${pathFor(x)}">${esc(pitch[x.slug].title)}</a>`).join('')}<a href="/arrepentimiento">Botón de arrepentimiento</a><a href="/mis-reclamos">Mis informes</a>${admin(user)?'<a href="/admin">Administración</a>':''}${user&&user.password!=='!'?'':'<a class="nav-cta" href="/mi-facturacion">Ingresar</a>'}</nav></header>
   <main>${body}</main><footer><span>Categoría Clara</span><a href="/terminos">Términos</a><a href="/privacidad">Privacidad</a>${release.support?`<a href="mailto:${esc(release.support)}">Soporte</a>`:''}</footer></body></html>`);
 }
 function plain(res,code,message,type='text/plain; charset=utf-8') {
@@ -242,7 +249,7 @@ async function deliver() {
     if(!job) return;
     try {
       const response=await sendMail(job.email,'Tu informe de Categoría Clara está listo',
-        'Tu informe está listo. Descargalo desde este enlace privado (no lo compartas): '+origin+'/p/'+unseal(job.access_sealed).toString(),'report-'+job.order_id);
+        'Tu informe está listo. Descargalo desde este enlace privado (no lo compartas): '+origin+'/p/'+unseal(job.access_sealed).toString()+'\n\nCon tu compra también tenés acceso a Mi facturación, el portal para gestionar tu Monotributo durante el año. Activalo creando tu contraseña con este mismo correo: '+origin+'/mi-facturacion?email='+encodeURIComponent(job.email)+'#crear','report-'+job.order_id);
       if(!response.ok) throw Error('mail '+response.status);
       sql("UPDATE deliveries SET state='sent' WHERE order_id=?",job.order_id);
     } catch {
@@ -385,14 +392,16 @@ async function route(req,res) {
   if(method==='GET'&&path==='/tabla.json'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=3600'});return res.end(JSON.stringify({id:MONO_TABLE.id,vigencia:MONO_TABLE.vigencia,categorias:MONO_TABLE.categorias.map(({cat,ingresos})=>({cat,ingresos})),recategorizacion:RECATEGORIZACION}));}
   if(method==='GET'&&path==='/mi-facturacion'){
     event('view_item','portal',undefined,user?'portal':'portal-login');
-    const head=`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">Gratis</p><h1>Mi facturación</h1><p class="lead">Cargá tus facturas a medida que las hacés y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías en la próxima recategorización.</p></div>`;
+    const head=`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">Portal incluido con tu informe</p><h1>Mi facturación</h1><p class="lead">Gestioná tu Monotributo todo el año: cargá tus facturas a medida que las hacés y mirá en tiempo real cuánto llevás facturado y en qué categoría vas a quedar.</p></div>`;
+    const prefill=String(url.searchParams.get('email')||'').slice(0,254);
     if(!user) return show('Mi facturación',head+`<div class="svc-grid auth">
-<section class="panel"><h2>Creá tu cuenta</h2><p class="muted small">Gratis. Solo tu correo y una contraseña. Nunca te pedimos clave fiscal.</p>
-${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetí la contraseña<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button>Crear cuenta</button>`)}</section>
-<aside class="panel aside"><h2>Ya tengo cuenta</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}<p class="small"><a href="/cuenta/olvide">Olvidé mi contraseña</a></p>
-<h3>Qué vas a poder hacer</h3>${checks(['Cargar facturas y notas de crédito, o importar el CSV de Mis Comprobantes','Ver cuánto llevás facturado y en qué categoría quedarías','Saber cuánto te falta para el tope de tu categoría','Tener todo guardado y verlo desde el celu o la compu'])}</aside></div>`,{canonical:'/mi-facturacion',description:'Cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría del Monotributo quedarías. Gratis.'});
-    const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
+<section class="panel" id="crear"><h2>Activá tu portal</h2><p class="muted small">Si compraste tu informe, creá tu contraseña con el <b>mismo correo de la compra</b>. Nunca te pedimos clave fiscal.</p>
+${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" value="${esc(prefill)}" required></label><label>Contraseña <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetí la contraseña<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button>Crear cuenta</button>`)}</section>
+<aside class="panel aside" id="ingresar"><h2>Ingresar</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" value="${esc(prefill)}" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}<p class="small"><a href="/cuenta/olvide">Olvidé mi contraseña</a></p>
+<h3>Qué incluye el portal</h3>${checks(['Cargar facturas y notas de crédito, o importar el CSV de Mis Comprobantes','Ver cuánto llevás facturado y en qué categoría quedarías','Saber cuánto te falta para el tope de tu categoría','Tener todo guardado y verlo desde el celu o la compu'])}<p class="small">¿Todavía no compraste? El portal viene incluido con el <a href="/servicios/monotributocheck">informe de recategorización</a>.</p></aside></div>`,{canonical:'/mi-facturacion',description:'Portal para gestionar tu Monotributo: cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías.'});
     const pending=!verified(user)?`<div class="panel wide note-box verify"><p><b>Confirmá tu correo.</b> Te mandamos un enlace a ${esc(user.email)}. Sirve para recuperar la cuenta si olvidás la contraseña.</p>${post('/cuenta/reenviar','<button class="ghost">Reenviar el correo</button>')}</div>`:'';
+    if(!hasPortal(user)) return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}<section class="panel wide note-box"><h2>El portal viene con tu informe</h2><p>Esta cuenta todavía no tiene una compra. Al comprar el informe de recategorización (${ars(price('monotributocheck'))}) con este mismo correo, se activa el portal para gestionar tu Monotributo todo el año.</p><a class="button" href="/servicios/monotributocheck">Calcular mi categoría</a><p class="small muted">¿Compraste con otro correo? Salí e ingresá con ese.</p></section>`,{canonical:'/mi-facturacion'});
+    const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
     return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}
 <div id="portal" data-account="1"><div id="migrate" class="panel wide note-box" hidden><p id="migrate-txt"></p><button type="button" id="migrate-btn">Pasarlos a mi cuenta</button> <button type="button" class="link" id="migrate-skip">No, gracias</button></div>
 <section class="kpis">
@@ -520,6 +529,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
   }
   if(path.startsWith('/api/facturacion')){
     if(!user) fail(401,'Ingresá a tu cuenta.');
+    if(!hasPortal(user)) fail(403,'El portal se activa con la compra del informe.');
     if(method==='GET'&&path==='/api/facturacion') return sendJson(res,portalData(user));
     if(method==='POST'&&path==='/api/facturacion/perfil'){
       const body=await jsonBody(req,4096);
@@ -692,7 +702,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     if(ready) sql('UPDATE orders SET accessed_at=COALESCE(accessed_at,?) WHERE id=?',time(),order.id);
     const name=getService(order.slug)?.name||'Pedido';
     const body=order.purged_at?'<p>El contenido de este pedido se eliminó por la política de conservación de datos.</p>'
-      :ready?`<p class="status">Pago acreditado</p><p>${getService(order.slug)?.teaser?'Tu informe está listo':'Tu nota está lista'}. También te enviamos este enlace por correo.</p>${link(self+'/pdf','Descargar PDF')}`
+      :ready?`<p class="status">Pago acreditado</p><p>${getService(order.slug)?.teaser?'Tu informe está listo':'Tu nota está lista'}. También te enviamos este enlace por correo.</p>${link(self+'/pdf','Descargar PDF')}${order.slug==='monotributocheck'?portalInvite(order):''}`
       :order.state==='pending'?`<div data-autorefresh><p>Estamos esperando la confirmación de Mercado Pago. Esta página se actualiza sola.</p></div><p class="muted small">Si todavía no pagaste, podés hacerlo ahora.</p>${post(self+'/checkout',button('Pagar con Mercado Pago'))}`
       :`<p>${esc(statuses[order.state])}</p>`;
     return show(name,`<h1>${getService(order.slug)?.teaser?'Tu informe':'Tu reclamo'}</h1><section class="panel"><p class="muted small">${esc(name)} · Pedido ${esc(order.id)} · ${ars(order.cents)}${order.mode==='test'?' · Ambiente de prueba':''}</p>${body}<p class="muted small">Guardá este enlace: es privado y te da acceso a tu compra.</p></section>${ready?noteBlock(order):''}`);

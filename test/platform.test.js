@@ -164,7 +164,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.equal(sitemap.match(/<loc>/g).length,10);
   // Portal Mi facturación: página, script y tabla pública
   const anon=await (await get('/mi-facturacion')).text();
-  assert.match(anon,/Creá tu cuenta/); assert.doesNotMatch(anon,/id="portal"/);
+  assert.match(anon,/Activá tu portal/); assert.doesNotMatch(anon,/id="portal"/);
   assert.equal((await get('/api/facturacion')).status,401);
   assert.equal((await send('/cuenta/crear',{email:'ana@example.test',password:'corta',password2:'corta',consent:'x'})).status,422);
   const signup=await send('/cuenta/crear',{email:'Ana@Example.test',password:'una clave larga 123',password2:'una clave larga 123',consent:'local-v1'});
@@ -198,6 +198,11 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const anaNew=await send('/cuenta/ingresar',{email:'ana@example.test',password:'nueva clave de ana 1'});
   assert.equal(anaNew.status,303);
   ana=anaNew.headers.get('set-cookie').split(';')[0];
+  // Sin compra: el portal no se habilita
+  assert.match(await (await get('/mi-facturacion',ana)).text(),/El portal viene con tu informe/);
+  assert.equal((await get('/api/facturacion',ana)).status,403);
+  {const w=new (await import('node:sqlite')).DatabaseSync(env.DB_PATH);
+   w.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES ('orden-ana',(SELECT id FROM users WHERE email='ana@example.test'),'monotributocheck','1.0.0',1052,'ready','x','2026-11-23T00:00:00Z','local-v1','test','pago-1')").run(); w.close();}
   const portal=await (await get('/mi-facturacion',ana)).text();
   assert.match(portal,/id="portal"/); assert.match(portal,/src="\/portal.js"/); assert.match(portal,/<option value="K">/); assert.match(portal,/ana@example.test/);
   const api=(path,body,cookie=ana,extra={})=>fetch(local+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie,...extra},body:JSON.stringify(body)});
@@ -214,7 +219,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.ok(stored.every(r=>!Buffer.from(r.detail).toString().includes('Cliente Uno')));
   // Otro usuario no ve ni borra comprobantes ajenos
   const beto=(await send('/cuenta/crear',{email:'beto@example.test',password:'clave de beto 12345',password2:'clave de beto 12345',consent:'local-v1'})).headers.get('set-cookie').split(';')[0];
-  assert.equal((await (await get('/api/facturacion',beto)).json()).facturas.length,0);
+  assert.equal((await get('/api/facturacion',beto)).status,403);
   await api('/api/facturacion/borrar',{id:data.facturas[0].id},beto);
   assert.equal((await (await get('/api/facturacion',ana)).json()).facturas.length,2);
   await api('/api/facturacion/borrar',{id:data.facturas[0].id});
@@ -302,7 +307,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   // Depuración por antigüedad
   const {DatabaseSync}=await import('node:sqlite');
   const store=new DatabaseSync(env.DB_PATH);
-  store.prepare("UPDATE orders SET created='2020-01-01T00:00:00.000Z'").run();
+  store.prepare("UPDATE orders SET created='2020-01-01T00:00:00.000Z' WHERE id<>'orden-ana'").run();
   store.close();
   const purge=spawn(process.execPath,['server.js','depurar'],{env});
   let purged='';

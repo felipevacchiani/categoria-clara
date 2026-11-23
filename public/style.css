@@ -100,3 +100,5 @@ td.right,th.right{text-align:right}td.neg{color:#a8432a}
 .note-box{background:var(--accent-soft);border-color:var(--accent)}
 details.danger{margin:2rem 0 0;font-size:.9rem;color:var(--muted)}details.danger summary{cursor:pointer}details.danger form{margin-top:.6rem;max-width:26rem}details.danger button{background:#a8432a}
 .auth .aside{border-top-color:var(--ink)}
+nav a.nav-cta{background:var(--ink);color:#fffaf0;padding:.45rem .9rem;border-radius:.4rem;text-decoration:none;font-weight:600}nav a.nav-cta:hover{color:var(--accent)}
+.portal-invite{margin-top:1.5rem;padding:1.2rem 1.3rem;border-radius:.6rem;background:var(--ink);color:#f3eee5}.portal-invite h2{color:#fffaf0;font-size:1.3rem;margin:0 0 .4rem}.portal-invite p{color:#d9d2c5}.portal-invite .button{background:var(--accent);color:var(--ink)}

@@ -86,7 +86,8 @@ pitch.monotributocheck = {
     'La cuota nueva y cuánto cambia en el semestre',
     'Cuánto podés facturar en diciembre sin pasarte de categoría',
     'Alertas: exclusión del régimen, cobros sin facturar y recategorización de oficio',
-    'El paso a paso para hacer el trámite en ARCA, en un PDF para guardar o pasarle a tu contador'
+    'El paso a paso para hacer el trámite en ARCA, en un PDF para guardar o pasarle a tu contador',
+    'Además: acceso al portal Mi facturación para gestionar tu Monotributo todo el año (cargá tus facturas y seguí tu categoría en tiempo real)'
   ],
   steps: [
     ['Cargá tus números', 'Lo que facturaste en el año, lo que pensás facturar en diciembre y, si tenés local, superficie, luz y alquiler.'],

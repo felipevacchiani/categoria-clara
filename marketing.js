@@ -293,7 +293,7 @@ export const site = {
   lead: 'Cargá lo que facturaste y te decimos al instante si cambiás de categoría. El informe completo te dice cuánto vas a pagar, cuánto podés facturar en diciembre y cómo hacer el trámite.',
   cta: 'Calcular mi categoría',
   trust: ['Tabla oficial de ARCA vigente', 'Sin clave fiscal ni cuenta', 'Resultado gratis al instante'],
-  description: 'Calculá tu recategorización del Monotributo con la tabla oficial de ARCA: categoría, cuota, cuánto podés facturar en diciembre y paso a paso.'
+  description: 'Calculá tu recategorización del Monotributo con la tabla oficial de ARCA, tu aguinaldo, tu liquidación final, el aumento del alquiler, el costo real de un préstamo y Ganancias. Gratis al instante.'
 };
 
 const baseCases = [

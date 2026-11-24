@@ -229,6 +229,30 @@ const alquilerCases = [
     points: ['Contratos de julio 2020 a diciembre 2023: ajuste anual por ICL.', 'Contratos desde el 29/12/2023: índice, plazo y frecuencia libres.', 'El aumento nunca se aplica antes de la fecha pactada.', 'Guardá el cálculo por escrito.'] }
 ];
 
+// ---- Compras al exterior (gratis) ----
+pitch['compras-exterior'] = {
+  title: 'Impuestos de compras al exterior',
+  tagline: 'Calculá gratis cuánto pagás de impuestos en una compra de Amazon, Shein o Temu por courier o correo, con la franquicia de US$ 400.',
+  placeholders: { precio: 'Ej.: 250', envio: 'Ej.: 20', cambio: 'Ej.: 1.500' },
+  includes: ['El costo final en pesos y en dólares', 'Cuánto es de impuestos y por qué', 'Cómo aprovechar la franquicia para pagar menos'],
+  steps: [
+    ['Cargá tu compra', 'Precio, envío, qué comprás y la cotización del dólar.'],
+    ['Mirá el resultado', 'Gratis y al instante.'],
+    ['Comprá con los números claros', 'Sabés cuánto vas a pagar antes de confirmar.']
+  ],
+  faq: [
+    ['¿Cuánto puedo comprar sin pagar aranceles?', 'Hasta US$ 400 por envío, en 5 envíos por año y por persona. Dentro de la franquicia no pagás derechos de importación ni tasa de estadística, pero sí IVA del 21%.'],
+    ['¿Qué pasa si el pedido supera los US$ 400?', 'El excedente paga el derecho de importación de cada producto, la tasa de estadística del 3% e IVA.'],
+    ['¿Es lo mismo courier que Correo Argentino?', 'Sí. Desde el Decreto 604/2026 los dos tienen la misma franquicia de US$ 400 y el mismo cupo de 5 envíos.']
+  ],
+  mock: ['Costo final', 'Impuestos', 'Cómo pagar menos']
+};
+
+const exteriorCases = [
+  { path: 'cuanto-pago-de-impuestos-compras-shein-temu-amazon', service: 'compras-exterior', title: 'Cuánto pagás de impuestos en Shein, Temu y Amazon', intro: 'Con el régimen vigente, los envíos de hasta US$ 400 pagan solo IVA. Calculá el costo final de tu compra antes de confirmarla.',
+    points: ['Franquicia de US$ 400 por envío, 5 envíos por año.', 'Dentro de la franquicia: solo IVA del 21%.', 'Sobre el excedente: derecho de importación, tasa de estadística del 3% e IVA.', 'Tope de US$ 3.000 por envío.'] }
+];
+
 export const site = {
   service: 'monotributocheck',
   eyebrow: 'Monotributo · Recategorización febrero 2027',
@@ -244,6 +268,7 @@ const baseCases = [
   ...laboralCases,
   ...creditoCases,
   ...alquilerCases,
+  ...exteriorCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
     ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],

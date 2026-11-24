@@ -21,6 +21,7 @@ const formValues={
   'jubilacheck':{aportes:'30',objetivo:'120'},
   'creditocheck':{capital:'1.000.000',cuotaA:'100.000',plazoA:'12',comparar:'si',cuotaB:'60.000',plazoB:'24',inflacion:'2'},
   'alquiler-claro':{monto:'500.000',indice:'ipc',periodo:'4',desde:'2026-08-01'},
+  'compras-exterior':{precio:'500',envio:'20',arancel:'a20',cupo:'si',cambio:'1.000'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
   'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',billeteras:'si'},
   'liquidacion-final':{motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'},
@@ -38,7 +39,7 @@ const formValues={
   'envio-reclamo':{tipo:'no_entregado',empresa:'Operador A',promesa:'2026-01-01',revision:'2026-01-07',hechos:'Sin entrega.',pedido:'entrega',envio:'2026-01-08',plazo:'10'},
   'consumo-defensa':{tipo:'garantia',empresa:'Local A',fecha:'2026-01-01',hechos:'Se entregó con una falla.',pedido:'reposición',envio:'2026-01-05',plazo:'10'}
 };
-const expected=['2026-01-11','20.','4.000','Diferencia','90.','conviene la oferta','540.566,91','14 dígitos','subís de la categoría C a la D','12.000.000,00','397.826,09','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
+const expected=['2026-01-11','20.','4.000','Diferencia','90.','conviene la oferta','540.566,91','US$ 132,83','14 dígitos','subís de la categoría C a la D','12.000.000,00','397.826,09','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
 for(const [i, service] of services.entries()){
   test(service.name+' procesa y valida sus datos',()=>{
     const {lines}=evaluate(service,formValues[service.slug]);
@@ -194,14 +195,14 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,21);
+  assert.equal(markup.match(/href="\/guias\//g).length,22);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/Reclamo a una|Mi cuenta|Servicio completo pendiente/);
   assert.match(markup,/href="\/servicios\/liquidacion-final"/);
   assert.match(markup,/href="\/servicios\/aguinaldo"[\s\S]*?|Gratis/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,29);
+  assert.equal(sitemap.match(/<loc>/g).length,31);
   assert.match(sitemap,/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
   const guias=await (await get('/guias')).text(); assert.match(guias,/Guías de Monotributo/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
   const catPage=await (await get('/guias/categorias-monotributo-cuota-mensual')).text(); assert.match(catPage,/class="table cat-table"/); assert.match(catPage,/"@type":"Article"/); assert.match(catPage,/"@type":"BreadcrumbList"/); assert.match(catPage,/Otras guías de Monotributo/);

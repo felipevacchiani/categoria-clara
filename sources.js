@@ -9,6 +9,7 @@ export const sources = {
   'liquidacion-final':['Ley de Contrato de Trabajo · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-20744-25552/actualizacion'],
   aguinaldo:['Ley 23.041 · Sueldo anual complementario','https://www.argentina.gob.ar/normativa/nacional/ley-23041-54479/texto'],
   'alquiler-claro':['BCRA · Índice para Contratos de Locación','https://www.bcra.gob.ar/PublicacionesEstadisticas/Principales_variables_datos.asp'],
+  'compras-exterior':['ARCA · Régimen de pequeños envíos','https://servicioscf.afip.gob.ar/publico/sitio/contenido/novedad/ver.aspx?id=5939'],
   monotributocheck:['ARCA · Categorías vigentes','https://www.arca.gob.ar/monotributo/categorias.asp'],
   importafacil:['ARCA · Tributos en courier','https://www.arca.gob.ar/envios-internacionales/courier/conceptos-generales/tributos.asp'],
   'mi-partida':['Provincia de Buenos Aires · Solicitud de partidas','https://gba.gob.ar/registrodelaspersonas/solicitud_de_partidas_online'],

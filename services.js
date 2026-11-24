@@ -3,6 +3,7 @@ import {liquidacionFields,evaluateLiquidacion,liquidacionTeaser,aguinaldoFields,
 import {creditoFields,evaluateCredito,creditoTeaser} from './credito.js';
 import {alquilerFields,evaluateAlquiler,alquilerTeaser} from './alquiler.js';
 import {exteriorFields,evaluateExterior} from './exterior.js';
+import {gananciasFields,evaluateGanancias,gananciasTeaser} from './ganancias.js';
 import {choice,CONSUMO,ENVIO,VUELO,internacionalField,consumoEngine,envioEngine,vueloEngine} from './reclamos.js';
 const number = (key, label) => ({ key, label, type: 'number' });
 const field = (key, label) => ({ key, label, type: 'text' });
@@ -54,6 +55,8 @@ const entries = [
  alquilerFields(number),x=>evaluateAlquiler(x),'Índices oficiales actualizados automáticamente.',true,'1.0.0'],
 ['compras-exterior','Compras al Exterior',3,'Calculá cuánto pagás de impuestos en una compra por courier o correo.',
  exteriorFields(number),evaluateExterior,'Herramienta gratuita.',false,'1.0.0'],
+['ganancias-claro','Ganancias Claro',1,'Calculá cuánto pagás de Ganancias como empleado y cuánto te ahorra el SiRADIG.',
+ gananciasFields(number),evaluateGanancias,'Revisión de un contador de las tablas vigentes de ARCA.',true,'1.0.0'],
 ['facturacheck','FacturaCheck',2,'Revisá la coherencia formal del CUIT, código y vencimiento informados.',
  [field('cuit','CUIT de un emisor de prueba o de tu organización'),field('cae','CAE de 14 dígitos'),date('emision','Fecha de emisión'),date('vence','Fecha de vencimiento del CAE')],
  x => {const digits=x.cuit.replace(/-/g,''); const sum=[5,4,3,2,7,6,5,4,3,2].reduce((s,w,i)=>s+w*Number(digits[i]),0);return [`CUIT, dígito verificador: ${/^\d{11}$/.test(digits)&&(11-sum%11)%11===Number(digits[10])?'coincide':'revisar'}.`,`Formato del CAE: ${/^\d{14}$/.test(x.cae)?'14 dígitos':'revisar'}.`,`Orden de fechas: ${days(x.emision,x.vence)>=0?'coherente':'revisar'}.`,'La autenticidad se verifica mediante la constatación de ARCA.'];},'Credenciales y habilitación para el servicio de constatación de ARCA.'],
@@ -123,4 +126,5 @@ getService('monotributocheck').teaser = monotributoTeaser;
 getService('liquidacion-final').teaser = liquidacionTeaser;
 getService('creditocheck').teaser = creditoTeaser;
 getService('alquiler-claro').teaser = alquilerTeaser;
-export const listed = ['monotributocheck','liquidacion-final','aguinaldo','creditocheck','alquiler-claro','compras-exterior'].map(getService);
+getService('ganancias-claro').teaser = gananciasTeaser;
+export const listed = ['monotributocheck','liquidacion-final','aguinaldo','creditocheck','alquiler-claro','compras-exterior','ganancias-claro'].map(getService);

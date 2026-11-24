@@ -253,6 +253,39 @@ const exteriorCases = [
     points: ['Franquicia de US$ 400 por envío, 5 envíos por año.', 'Dentro de la franquicia: solo IVA del 21%.', 'Sobre el excedente: derecho de importación, tasa de estadística del 3% e IVA.', 'Tope de US$ 3.000 por envío.'] }
 ];
 
+// ---- Ganancias Claro ----
+pitch['ganancias-claro'] = {
+  title: 'Ganancias para empleados',
+  tagline: 'Sabé si pagás Ganancias, cuánto te retienen en el año y cuánto te ahorrás cargando alquiler, prepaga y cargas de familia en el SiRADIG.',
+  placeholders: { sueldo: 'Ej.: 4.500.000', hijos: 'Ej.: 1', alquiler: 'Ej.: 600.000', domestico: 'Ej.: 0', prepaga: 'Ej.: 150.000' },
+  includes: [
+    'Cuánto pagás de Ganancias en el año y por mes',
+    'El cálculo paso a paso con la escala y las deducciones oficiales de ARCA',
+    'Cuánto te ahorran el alquiler, el servicio doméstico y la prepaga',
+    'Desde qué sueldo empezás a pagar con tu situación familiar',
+    'Cómo cargar el SiRADIG para que no te retengan de más'
+  ],
+  steps: [
+    ['Cargá tu sueldo y tu familia', 'Sueldo bruto, cónyuge, hijos y lo que pagás de alquiler, servicio doméstico y prepaga.'],
+    ['Mirá si pagás', 'Gratis: te decimos si con esos datos pagás Ganancias.'],
+    ['Pagá y descargá', 'El informe con el monto, el cálculo y cuánto te ahorrás con el SiRADIG.']
+  ],
+  faq: [
+    ['¿Desde qué sueldo se paga Ganancias en 2026?', 'Depende de tu situación familiar y de tus deducciones. Para un soltero sin deducciones ronda los 3 millones brutos por mes; con cónyuge e hijos, bastante más.'],
+    ['¿Qué deducciones puedo cargar?', 'Alquiler de tu vivienda (40%), servicio doméstico registrado, prepaga, intereses de crédito hipotecario, donaciones y gastos médicos, entre otras, con sus topes.'],
+    ['¿Qué pasa si me retuvieron de más?', 'Se compensa en las liquidaciones siguientes y, al cerrar el año, en la liquidación anual que hace tu empleador.'],
+    ['¿Necesito clave fiscal?', 'No para el cálculo. Sí para cargar el SiRADIG en ARCA.']
+  ],
+  mock: ['Impuesto anual', 'Cálculo paso a paso', 'Ahorro con SiRADIG', 'Desde qué sueldo']
+};
+
+const gananciasCases = [
+  { path: 'desde-que-sueldo-se-paga-ganancias-2026', service: 'ganancias-claro', title: 'Desde qué sueldo se paga Ganancias en 2026', intro: 'El piso depende de tu familia y de lo que deduzcas. Calculá con tu sueldo si pagás y cuánto.',
+    points: ['Se suman 12 sueldos más el aguinaldo y se restan los aportes.', 'Se restan el mínimo no imponible, la deducción especial y las cargas de familia.', 'Alquiler, prepaga y servicio doméstico bajan el impuesto si los cargás en SiRADIG.', 'Sobre lo que queda se aplica la escala del 5% al 35%.'] },
+  { path: 'como-cargar-siradig-deducciones', service: 'ganancias-claro', title: 'Cómo cargar el SiRADIG para pagar menos Ganancias', intro: 'Si no informás tus deducciones, tu empleador te retiene como si no las tuvieras. Cargarlas en SiRADIG es gratis y se hace online.',
+    points: ['Entrá a ARCA con clave fiscal y abrí SiRADIG - Trabajador.', 'Cargá cónyuge e hijos en Cargas de familia.', 'Cargá alquiler, prepaga y servicio doméstico con sus comprobantes.', 'Enviá el formulario a tu empleador.'] }
+];
+
 export const site = {
   service: 'monotributocheck',
   eyebrow: 'Monotributo · Recategorización febrero 2027',
@@ -269,6 +302,7 @@ const baseCases = [
   ...creditoCases,
   ...alquilerCases,
   ...exteriorCases,
+  ...gananciasCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
     ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],

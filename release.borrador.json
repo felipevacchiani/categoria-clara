@@ -31,6 +31,12 @@
       "version": "1.0.0",
       "approval": "",
       "approvedBy": ""
+    },
+    "ganancias-claro": {
+      "cents": 590000,
+      "version": "1.0.0",
+      "approval": "",
+      "approvedBy": ""
     }
   }
 }

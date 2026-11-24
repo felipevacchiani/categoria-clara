@@ -195,6 +195,40 @@ const creditoCases = [
     points: ['La TNA es solo el interés nominal, sin cargos.', 'El CFT con IVA es lo que de verdad te cuesta el crédito por año.', 'Dos préstamos con la misma TNA pueden tener CFT muy distintos.', 'Pedilo siempre antes de firmar.'] }
 ];
 
+// ---- AlquilerClaro ----
+pitch['alquiler-claro'] = {
+  title: 'Aumento de alquiler',
+  tagline: 'Calculá cuánto vas a pagar de alquiler después del próximo aumento, por ICL o IPC, con los índices oficiales del BCRA y el INDEC.',
+  placeholders: { monto: 'Ej.: 500.000' },
+  includes: [
+    'El monto nuevo exacto y el porcentaje de aumento',
+    'El cálculo con los índices oficiales del BCRA o el INDEC, paso a paso, para mostrarle al propietario o al inquilino',
+    'Las fechas de los próximos tres ajustes',
+    'Qué dice la ley según cuándo firmaste el contrato'
+  ],
+  steps: [
+    ['Cargá tu contrato', 'El alquiler actual, el índice, cada cuánto aumenta y desde cuándo rige el monto.'],
+    ['Mirá la fecha del ajuste', 'Gratis: te decimos cuándo es el próximo aumento.'],
+    ['Pagá y descargá', 'Con Mercado Pago, sin crear cuenta. El PDF tiene el monto nuevo y el cálculo.']
+  ],
+  faq: [
+    ['¿De dónde salen los índices?', 'El ICL lo publica el BCRA todos los días y el IPC lo publica el INDEC todos los meses. Los tomamos de sus fuentes oficiales y se actualizan solos.'],
+    ['¿Qué índice usa mi contrato?', 'El que diga la cláusula de actualización. Los contratos firmados entre julio de 2020 y diciembre de 2023 usan el ICL anual de la Ley 27.551; los posteriores, el que hayan pactado las partes.'],
+    ['¿Sirve para propietarios?', 'Sí. El cálculo es el mismo para las dos partes y el PDF sirve para mostrarlo.'],
+    ['¿Y si el ajuste es dentro de varios días?', 'Calculamos con el último índice publicado y te avisamos que es una estimación. Recalculalo el día del ajuste.']
+  ],
+  mock: ['Alquiler nuevo', 'Cálculo con el índice', 'Próximos ajustes', 'Qué dice la ley']
+};
+
+const alquilerCases = [
+  { path: 'aumento-alquiler-icl', service: 'alquiler-claro', title: 'Aumento de alquiler por ICL: cómo se calcula', intro: 'El ICL es el índice del BCRA para contratos de locación. El aumento sale de dividir el ICL del día del ajuste por el del inicio del período.',
+    points: ['Se usa el ICL del día de inicio del período y el del día del ajuste.', 'El BCRA lo publica a diario.', 'Lo usan los contratos de la Ley 27.551 y muchos posteriores.', 'El aumento va sobre el alquiler, no sobre las expensas.'] },
+  { path: 'aumento-alquiler-ipc', service: 'alquiler-claro', title: 'Aumento de alquiler por IPC (inflación)', intro: 'En los contratos que ajustan por inflación, el aumento es la variación acumulada del IPC del INDEC en los meses del período.',
+    points: ['El INDEC publica el IPC de cada mes a mediados del mes siguiente.', 'Se toma la variación acumulada de tantos meses como dure el período.', 'Si el contrato fija otros meses, vale el contrato.', 'Desde el DNU 70/2023 el índice lo pactan las partes.'] },
+  { path: 'ley-de-alquileres-2026-que-rige', service: 'alquiler-claro', title: 'Ley de alquileres en 2026: qué rige para tu contrato', intro: 'Depende de cuándo lo firmaste: los contratos anteriores al 29/12/2023 siguen con la Ley 27.551; los posteriores, con lo que pactaron las partes según el DNU 70/2023.',
+    points: ['Contratos de julio 2020 a diciembre 2023: ajuste anual por ICL.', 'Contratos desde el 29/12/2023: índice, plazo y frecuencia libres.', 'El aumento nunca se aplica antes de la fecha pactada.', 'Guardá el cálculo por escrito.'] }
+];
+
 export const site = {
   service: 'monotributocheck',
   eyebrow: 'Monotributo · Recategorización febrero 2027',
@@ -209,6 +243,7 @@ const baseCases = [
   ...reclamosCases,
   ...laboralCases,
   ...creditoCases,
+  ...alquilerCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
     ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],

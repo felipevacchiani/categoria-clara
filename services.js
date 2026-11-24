@@ -1,6 +1,7 @@
 import {monotributoFields,evaluateMonotributo,monotributoTeaser} from './monotributo.js';
 import {liquidacionFields,evaluateLiquidacion,liquidacionTeaser,aguinaldoFields,evaluateAguinaldo} from './laboral.js';
 import {creditoFields,evaluateCredito,creditoTeaser} from './credito.js';
+import {alquilerFields,evaluateAlquiler,alquilerTeaser} from './alquiler.js';
 import {choice,CONSUMO,ENVIO,VUELO,internacionalField,consumoEngine,envioEngine,vueloEngine} from './reclamos.js';
 const number = (key, label) => ({ key, label, type: 'number' });
 const field = (key, label) => ({ key, label, type: 'text' });
@@ -48,6 +49,8 @@ const entries = [
  x => {check([x.aportes,x.objetivo].every(Number.isInteger),'Ingresá una cantidad entera de meses.');return [`Meses restantes hasta el objetivo declarado: ${Math.max(0,x.objetivo-x.aportes)}.`,'Contrastá tus aportes con tu Historia Laboral de ANSES.'];},'Historia laboral autorizada, régimen aplicable y validación previsional.'],
 ['creditocheck','CréditoCheck',1,'Calculá el costo real de un préstamo y compará ofertas, con inflación.',
  creditoFields(number),evaluateCredito,'Revisión metodológica del cálculo de tasa efectiva.',true,'2.0.0'],
+['alquiler-claro','AlquilerClaro',4,'Calculá el aumento de tu alquiler por ICL o IPC con los índices oficiales.',
+ alquilerFields(number),x=>evaluateAlquiler(x),'Índices oficiales actualizados automáticamente.',true,'1.0.0'],
 ['facturacheck','FacturaCheck',2,'Revisá la coherencia formal del CUIT, código y vencimiento informados.',
  [field('cuit','CUIT de un emisor de prueba o de tu organización'),field('cae','CAE de 14 dígitos'),date('emision','Fecha de emisión'),date('vence','Fecha de vencimiento del CAE')],
  x => {const digits=x.cuit.replace(/-/g,''); const sum=[5,4,3,2,7,6,5,4,3,2].reduce((s,w,i)=>s+w*Number(digits[i]),0);return [`CUIT, dígito verificador: ${/^\d{11}$/.test(digits)&&(11-sum%11)%11===Number(digits[10])?'coincide':'revisar'}.`,`Formato del CAE: ${/^\d{14}$/.test(x.cae)?'14 dígitos':'revisar'}.`,`Orden de fechas: ${days(x.emision,x.vence)>=0?'coherente':'revisar'}.`,'La autenticidad se verifica mediante la constatación de ARCA.'];},'Credenciales y habilitación para el servicio de constatación de ARCA.'],
@@ -116,4 +119,5 @@ export function evaluate(service, values) {
 getService('monotributocheck').teaser = monotributoTeaser;
 getService('liquidacion-final').teaser = liquidacionTeaser;
 getService('creditocheck').teaser = creditoTeaser;
-export const listed = ['monotributocheck','liquidacion-final','aguinaldo','creditocheck'].map(getService);
+getService('alquiler-claro').teaser = alquilerTeaser;
+export const listed = ['monotributocheck','liquidacion-final','aguinaldo','creditocheck','alquiler-claro'].map(getService);

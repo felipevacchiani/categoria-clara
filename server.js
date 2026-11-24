@@ -2,9 +2,10 @@ import {TABLE as MONO_TABLE,RECATEGORIZACION} from './monotributo.js';
 import {createServer} from 'node:http';
 import {createHash,randomBytes,randomUUID,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync} from 'node:fs';
-import {dirname} from 'node:path';
+import {dirname,join} from 'node:path';
 import {promisify} from 'node:util';
 import {openDatabase,atomic} from './db.js';
+import {startIndices} from './indices.js';
 import {services,listed as catalog,getService,evaluate} from './services.js';
 import {pitch,cases,site} from './marketing.js';
 import {CONSUMO,ENVIO,VUELO} from './reclamos.js';
@@ -278,6 +279,7 @@ async function deliver() {
   } finally {delivering=false;}
 }
 setInterval(()=>deliver().catch(()=>console.error('Error en cola de correo')),15000).unref();
+if(!process.argv[2]&&env.NODE_ENV!=='test') startIndices(dbPath===':memory:'?null:join(dirname(dbPath),'indices.json')).catch(()=>{});
 if(!process.argv[2]&&env.NODE_ENV!=='test') setInterval(()=>sweepPending().catch(()=>console.error('Error en el barrido de pagos')),120000).unref();
 if(!process.argv[2]) setInterval(()=>{try {purge();} catch {console.error('Error en la depuración');}},3600000).unref();
 function noteBlock(order) {

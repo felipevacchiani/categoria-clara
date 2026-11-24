@@ -1,5 +1,6 @@
 import {monotributoFields,evaluateMonotributo,monotributoTeaser} from './monotributo.js';
 import {liquidacionFields,evaluateLiquidacion,liquidacionTeaser,aguinaldoFields,evaluateAguinaldo} from './laboral.js';
+import {creditoFields,evaluateCredito,creditoTeaser} from './credito.js';
 import {choice,CONSUMO,ENVIO,VUELO,internacionalField,consumoEngine,envioEngine,vueloEngine} from './reclamos.js';
 const number = (key, label) => ({ key, label, type: 'number' });
 const field = (key, label) => ({ key, label, type: 'text' });
@@ -45,9 +46,8 @@ const entries = [
 ['jubilacheck','JubilaCheck',1,'Medí la diferencia entre aportes declarados y un objetivo personal.',
  [number('aportes','Meses de aportes registrados'),number('objetivo','Meses objetivo indicados para tu caso')],
  x => {check([x.aportes,x.objetivo].every(Number.isInteger),'Ingresá una cantidad entera de meses.');return [`Meses restantes hasta el objetivo declarado: ${Math.max(0,x.objetivo-x.aportes)}.`,'Contrastá tus aportes con tu Historia Laboral de ANSES.'];},'Historia laboral autorizada, régimen aplicable y validación previsional.'],
-['creditocheck','CréditoCheck',1,'Compará el desembolso total de dos ofertas expresadas en pesos.',
- [number('capital','Monto neto recibido, igual en ambas ofertas'),number('cuotaA','Cuota fija A'),number('plazoA','Cantidad de cuotas A'),number('cargoA','Cargos únicos A'),number('cuotaB','Cuota fija B'),number('plazoB','Cantidad de cuotas B'),number('cargoB','Cargos únicos B')],
- x => {check(x.capital>0 && [x.plazoA,x.plazoB].every(n=>Number.isInteger(n)&&n>0&&n<=600),'Indicá capital positivo y plazos de 1 a 600 cuotas.');const a=x.cuotaA*x.plazoA+x.cargoA,b=x.cuotaB*x.plazoB+x.cargoB;return [`Oferta A: ${money(a)}. Diferencia sobre capital: ${money(a-x.capital)}.`,`Oferta B: ${money(b)}. Diferencia sobre capital: ${money(b-x.capital)}.`,`Diferencia entre ofertas: ${money(Math.abs(a-b))}.`,'Comparación nominal de cuotas fijas. Revisá el CFT publicado y si incluye impuestos y seguros.'];},'Ofertas vigentes y metodología validada para informar CFT o emitir recomendaciones.',true],
+['creditocheck','CréditoCheck',1,'Calculá el costo real de un préstamo y compará ofertas, con inflación.',
+ creditoFields(number),evaluateCredito,'Revisión metodológica del cálculo de tasa efectiva.',true,'2.0.0'],
 ['facturacheck','FacturaCheck',2,'Revisá la coherencia formal del CUIT, código y vencimiento informados.',
  [field('cuit','CUIT de un emisor de prueba o de tu organización'),field('cae','CAE de 14 dígitos'),date('emision','Fecha de emisión'),date('vence','Fecha de vencimiento del CAE')],
  x => {const digits=x.cuit.replace(/-/g,''); const sum=[5,4,3,2,7,6,5,4,3,2].reduce((s,w,i)=>s+w*Number(digits[i]),0);return [`CUIT, dígito verificador: ${/^\d{11}$/.test(digits)&&(11-sum%11)%11===Number(digits[10])?'coincide':'revisar'}.`,`Formato del CAE: ${/^\d{14}$/.test(x.cae)?'14 dígitos':'revisar'}.`,`Orden de fechas: ${days(x.emision,x.vence)>=0?'coherente':'revisar'}.`,'La autenticidad se verifica mediante la constatación de ARCA.'];},'Credenciales y habilitación para el servicio de constatación de ARCA.'],
@@ -115,4 +115,5 @@ export function evaluate(service, values) {
 // Servicios visibles en el sitio. El resto queda oculto (404) hasta que esté listo para vender.
 getService('monotributocheck').teaser = monotributoTeaser;
 getService('liquidacion-final').teaser = liquidacionTeaser;
-export const listed = ['monotributocheck','liquidacion-final','aguinaldo'].map(getService);
+getService('creditocheck').teaser = creditoTeaser;
+export const listed = ['monotributocheck','liquidacion-final','aguinaldo','creditocheck'].map(getService);

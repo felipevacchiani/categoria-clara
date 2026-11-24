@@ -4,7 +4,7 @@ export const sources = {
   'calculo-indemnizacion':['Ley de Contrato de Trabajo · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-20744-25552/actualizacion'],
   sueldocheck:['Secretaría de Trabajo · Orientación laboral','https://www.argentina.gob.ar/trabajo/orientacion/laboral'],
   jubilacheck:['ANSES · Historia Laboral','https://www.argentina.gob.ar/servicio/consultar-tu-historia-laboral'],
-  creditocheck:['BCRA · Comparar costos y condiciones','https://www.bcra.gob.ar/prestamos-personales-comparar-costos-y-condiciones/'],
+  creditocheck:['BCRA · Préstamos personales: comparar costos','https://www.bcra.gob.ar/prestamos-personales-comparar-costos-y-condiciones/'],
   facturacheck:['ARCA · Manual WSCDC','https://www.arca.gob.ar/ws/WSCDCV1/WSCDC-manual-desarrollador-v4.pdf'],
   'liquidacion-final':['Ley de Contrato de Trabajo · texto actualizado','https://www.argentina.gob.ar/normativa/nacional/ley-20744-25552/actualizacion'],
   aguinaldo:['Ley 23.041 · Sueldo anual complementario','https://www.argentina.gob.ar/normativa/nacional/ley-23041-54479/texto'],

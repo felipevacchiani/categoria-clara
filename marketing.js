@@ -163,6 +163,38 @@ const laboralCases = [
     points: ['Días trabajados del último mes.', 'Aguinaldo proporcional del semestre.', 'Vacaciones no gozadas proporcionales, más su aguinaldo.', 'La renuncia se envía por telegrama laboral gratuito o en persona ante la autoridad laboral.'] }
 ];
 
+// ---- CréditoCheck ----
+pitch.creditocheck = {
+  title: 'Costo real de un préstamo',
+  tagline: 'Antes de sacar un préstamo personal, calculá cuánto te cuesta de verdad, compará dos ofertas y mirá cuánto valen las cuotas con la inflación.',
+  placeholders: { capital: 'Ej.: 1.000.000', cuotaA: 'Ej.: 100.000', plazoA: 'Ej.: 12', cuotaB: 'Ej.: 60.000', plazoB: 'Ej.: 24', inflacion: 'Ej.: 2' },
+  includes: [
+    'El costo efectivo anual real, con todos los cargos que vienen dentro de la cuota',
+    'Cuál de dos ofertas conviene y cuánto te ahorrás',
+    'Cuánto valen las cuotas en pesos de hoy con la inflación que esperás',
+    'Qué preguntar antes de firmar: CFT, cuota fija o ajustable y precancelación'
+  ],
+  steps: [
+    ['Cargá la oferta', 'Lo que recibís en mano, la cuota y la cantidad de cuotas. Si tenés otra oferta, cargala también.'],
+    ['Mirá el resultado', 'Ves gratis qué analizamos y qué incluye el informe.'],
+    ['Pagá y descargá', 'Dejás tu correo, pagás con Mercado Pago y descargás el PDF al instante.']
+  ],
+  faq: [
+    ['¿Por qué no alcanza con mirar la tasa que me dicen?', 'Porque la tasa nominal no incluye seguros, IVA ni comisiones. El costo efectivo sale de comparar lo que recibís en mano con lo que pagás de verdad.'],
+    ['¿Conviene la oferta con más cuotas?', 'Depende de la tasa y de la inflación. Con inflación alta, pagar más tarde pesa menos; si la inflación baja, las cuotas largas se encarecen. El informe te muestra las dos miradas.'],
+    ['¿Sirve para préstamos UVA?', 'No. El cálculo es para cuota fija en pesos.'],
+    ['¿Me piden datos del banco o personales?', 'No. Solo los montos de la oferta.']
+  ],
+  mock: ['Costo efectivo anual', 'Comparación de ofertas', 'En pesos de hoy', 'Antes de firmar']
+};
+
+const creditoCases = [
+  { path: 'como-calcular-costo-real-prestamo-personal', service: 'creditocheck', title: 'Cómo calcular el costo real de un préstamo personal', intro: 'La tasa que te muestran casi nunca es lo que pagás. Con el monto que recibís en mano y la cuota total, se calcula el costo efectivo real.',
+    points: ['Usá el monto que te depositan, no el monto "otorgado": los gastos de otorgamiento suben el costo.', 'Usá la cuota total que pagás, con IVA y seguros.', 'Compará siempre el CFT con IVA: la entidad está obligada a informarlo.', 'Con inflación, una cuota fija pesa cada mes menos.'] },
+  { path: 'cft-que-es-costo-financiero-total', service: 'creditocheck', title: 'Qué es el CFT y por qué importa más que la TNA', intro: 'El costo financiero total (CFT) suma intereses, comisiones, seguros e impuestos. Es el único número que sirve para comparar préstamos entre sí.',
+    points: ['La TNA es solo el interés nominal, sin cargos.', 'El CFT con IVA es lo que de verdad te cuesta el crédito por año.', 'Dos préstamos con la misma TNA pueden tener CFT muy distintos.', 'Pedilo siempre antes de firmar.'] }
+];
+
 export const site = {
   service: 'monotributocheck',
   eyebrow: 'Monotributo · Recategorización febrero 2027',
@@ -176,6 +208,7 @@ export const site = {
 const baseCases = [
   ...reclamosCases,
   ...laboralCases,
+  ...creditoCases,
   { path: 'como-hacer-factura-c-arca', service: 'monotributocheck', title: 'Cómo hacer una factura C en ARCA, paso a paso', intro: 'Como monotributista emitís Factura C electrónica desde «Comprobantes en línea» o desde la app Facturador de ARCA. La primera vez tenés que habilitar un punto de venta; después, cada factura lleva un par de minutos.', points: ['Necesitás clave fiscal nivel 3 y los servicios «Comprobantes en línea» y «Administración de puntos de venta y domicilios».', 'Si te equivocaste, no se borra: se anula con una nota de crédito C por el mismo importe.', 'Cada factura suma a tus ingresos del año: cargala también en Mi facturación para ver cómo venís con tu categoría.'], steps: [
     ['Primera vez: habilitá los servicios', 'En ARCA, con tu clave fiscal, entrá al «Administrador de Relaciones de Clave Fiscal» → «Adherir servicio» y sumá «Comprobantes en línea» y «Administración de puntos de venta y domicilios».'],
     ['Primera vez: creá el punto de venta', 'En «Administración de puntos de venta y domicilios» elegí tu nombre → «A/B/M de Puntos de venta» → «Agregar». Usá un número nuevo (por ejemplo 2) y el sistema de factura electrónica en línea para Monotributo.'],

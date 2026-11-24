@@ -19,6 +19,12 @@
       "version": "1.0.0",
       "approval": "",
       "approvedBy": ""
+    },
+    "creditocheck": {
+      "cents": 390000,
+      "version": "2.0.0",
+      "approval": "",
+      "approvedBy": ""
     }
   }
 }

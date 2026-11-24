@@ -205,7 +205,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const sitemap=await (await get('/sitemap.xml')).text();
   assert.equal(sitemap.match(/<loc>/g).length,34);
   assert.match(sitemap,/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
-  const guias=await (await get('/guias')).text(); assert.match(guias,/Guías de Monotributo/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
+  const guias=await (await get('/guias')).text(); assert.match(guias,/Guías prácticas/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
   const catPage=await (await get('/guias/categorias-monotributo-cuota-mensual')).text(); assert.match(catPage,/class="table cat-table"/); assert.match(catPage,/"@type":"Article"/); assert.match(catPage,/"@type":"BreadcrumbList"/); assert.match(catPage,/Otras guías de Monotributo/);
   // Portal Mi facturación: página, script y tabla pública
   const anon=await (await get('/mi-facturacion')).text();

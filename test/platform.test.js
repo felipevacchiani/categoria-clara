@@ -141,8 +141,10 @@ test('Liquidación final y aguinaldo: reforma 2026, tope del 67%, período de pr
   assert.doesNotMatch(all({egreso:'2026-11-30'}),/Integración del mes/);
   assert.throws(()=>evaluate(liq,{...base,egreso:'2018-01-01'}),/posterior/);
   const teaser=liq.teaser(evaluate(liq,base).lines);
-  assert.equal(teaser.facts[0][1],'9');
-  assert.doesNotMatch(JSON.stringify(teaser),/\$/);
+  assert.equal(teaser.facts[0][0],'Total estimado en mano');
+  assert.match(teaser.facts[0][1],/^Entre \$ [\d.]+ y \$ [\d.]+$/);
+  assert.match(teaser.facts[1][1],/^9: días trabajados del mes, .*indemnización por antigüedad$/);
+  assert.doesNotMatch(JSON.stringify(teaser),/,\d{2}/); // nunca centavos ni importes exactos
   const ag=getService('aguinaldo');
   assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2026-12-31'}).lines[0],/\$\s415\.000,00 en mano \(\$\s500\.000,00/);
   assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2027-06-30'}).lines.join(' '),/30\/06\/2027/);

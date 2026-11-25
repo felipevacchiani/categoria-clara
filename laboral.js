@@ -162,11 +162,25 @@ export function evaluateLiquidacion(x) {
   return lines;
 }
 
+// Vista previa gratis: muestra el orden de magnitud del total (un rango) y qué conceptos te corresponden,
+// sin importes por concepto. El informe pago da el número exacto, el detalle y cómo verificar el recibo.
+const rango = n => {
+  const step = Math.pow(10, Math.max(4, Math.floor(Math.log10(n)) - 1) );
+  const lo = Math.floor(n / step) * step;
+  const f = v => '$ ' + v.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  return `Entre ${f(lo)} y ${f(lo + step)}`;
+};
 export function liquidacionTeaser(lines) {
   const conceptos = lines.filter(l => l.startsWith('- ') && /: \$/.test(l) && !/^- (Total|Descuentos)/.test(l));
+  const neto = Number((lines[0].match(/de \$\s?([\d.]+),(\d{2}) en mano/) || [])[1]?.replace(/\./g, ''));
+  const nombres = conceptos.map(l => l.slice(2, l.indexOf(':')).replace(/ \(.*$/, '').toLowerCase().replace(/\bsac\b/g, 'SAC'));
   return {
-    facts: [['Conceptos que te corresponden', String(conceptos.length)], ['Plazo de pago', '4 días hábiles desde el egreso']],
-    includes: ['El total a cobrar en mano y el bruto', 'Cada concepto con su importe y cómo se calcula', 'Los cambios de la reforma laboral 2026 aplicados a tu caso', 'Qué hacer antes de firmar el recibo y cómo reclamar si no te pagan']
+    facts: [
+      ...(neto > 0 ? [['Total estimado en mano', rango(neto)]] : []),
+      ['Conceptos que te corresponden', `${conceptos.length}: ${nombres.join(', ')}`],
+      ['Plazo de pago', '4 días hábiles desde el egreso']
+    ],
+    includes: ['El total exacto a cobrar en mano y el bruto', 'Cada concepto con su importe y cómo se calcula, para controlarlo contra tu recibo', 'Los cambios de la reforma laboral 2026 aplicados a tu caso', 'Qué hacer antes de firmar el recibo y cómo reclamar si no te pagan']
   };
 }
 

@@ -155,7 +155,7 @@ for (const box of document.querySelectorAll('[data-sum-into]')) {
   if (decision === '1') return load();
   if (decision === '0') return;
   const bar = document.createElement('div');
-  bar.className = 'consent';
+  bar.className = 'cookie-bar';
   bar.setAttribute('role', 'dialog');
   bar.setAttribute('aria-label', 'Cookies');
   bar.innerHTML = '<p>Usamos el píxel de Meta para medir nuestros anuncios en Instagram y Facebook. No carga hasta que aceptes. <a href="/privacidad">Más info</a></p><div><button type="button" data-v="0" class="ghost">Rechazar</button><button type="button" data-v="1">Aceptar</button></div>';

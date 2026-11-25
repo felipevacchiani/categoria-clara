@@ -153,6 +153,12 @@ pitch.aguinaldo = {
 };
 
 const laboralCases = [
+  { path: 'aguinaldo-proporcional-como-se-calcula', service: 'aguinaldo', title: 'Aguinaldo proporcional: cómo se calcula si no trabajaste el semestre completo', intro: 'Si entraste o te fuiste a mitad de semestre, el aguinaldo se paga en proporción a los días trabajados. Calculalo gratis.',
+    points: ['Se toma la mitad del mejor sueldo bruto del semestre.', 'Se multiplica por los días trabajados y se divide por los días del semestre (181 o 184).', 'Si te fuiste, se cobra con la liquidación final.', 'Lleva los mismos descuentos que el sueldo: 17%.'] },
+  { path: 'me-despidieron-en-periodo-de-prueba', service: 'liquidacion-final', title: 'Me despidieron en el período de prueba: qué me tienen que pagar', intro: 'Con la Ley 27.802, en el período de prueba no hay indemnización ni preaviso, pero sí te deben todo lo que trabajaste. Calculá cuánto.',
+    points: ['El período de prueba es, en general, de 6 meses; algunos convenios o empresas tienen plazos más largos.', 'No corresponden indemnización por antigüedad, preaviso ni integración del mes.', 'Sí te tienen que pagar los días trabajados, el aguinaldo proporcional y las vacaciones proporcionales.', 'El pago vence a los 4 días hábiles del egreso.'] },
+  { path: 'vacaciones-no-gozadas-como-se-calculan', service: 'liquidacion-final', title: 'Vacaciones no gozadas: cómo se calculan al terminar el trabajo', intro: 'Si te vas del trabajo sin haberte tomado las vacaciones, te las tienen que pagar en la liquidación final, proporcionales a lo trabajado en el año.',
+    points: ['Te corresponden 14 días por año con menos de 5 años de antigüedad, 21 hasta 10 años, 28 hasta 20 y 35 con más.', 'Se calculan en proporción a los días trabajados en el año y se restan los que ya te tomaste.', 'Cada día vale el sueldo mensual dividido 25.', 'Se suma su aguinaldo (un doceavo) y no llevan descuentos.'] },
   { path: 'aguinaldo-diciembre-2026', service: 'aguinaldo', title: 'Aguinaldo de diciembre 2026: cuánto cobrás y cuándo', intro: 'El medio aguinaldo de diciembre se paga hasta el 18/12 y es la mitad del mejor sueldo bruto de julio a diciembre. Calculalo gratis con tu sueldo.',
     points: ['Es el 50% del mejor sueldo bruto del semestre, incluidas horas extra y comisiones de ese mes.', 'Si entraste después del 1 de julio, cobrás en proporción a los días trabajados.', 'Tiene los mismos descuentos que el sueldo: 17% de aportes.', 'El plazo es el 18 de diciembre, con hasta 4 días hábiles de tolerancia.'] },
   { path: 'como-calcular-liquidacion-final', service: 'liquidacion-final', title: 'Cómo calcular tu liquidación final en 2026', intro: 'La liquidación final suma todo lo que te deben al terminar el trabajo. Qué entra depende de si renunciaste, te despidieron sin causa o estabas en período de prueba.',
@@ -189,6 +195,8 @@ pitch.creditocheck = {
 };
 
 const creditoCases = [
+  { path: 'conviene-sacar-prestamo-en-cuotas-con-inflacion', service: 'creditocheck', title: '¿Conviene sacar un préstamo en cuotas fijas con inflación?', intro: 'Con inflación, una cuota fija pesa cada mes menos en tu bolsillo. Si la tasa es menor que la inflación esperada, el préstamo se licúa; si es mayor, te sale caro.',
+    points: ['Compará la tasa mensual efectiva del préstamo con la inflación mensual que esperás.', 'Si la tasa es menor, el costo real es negativo: las cuotas valen menos que lo que recibís.', 'Si la inflación baja, las cuotas largas se encarecen en términos reales.', 'Este análisis vale solo para cuota fija en pesos, no para préstamos UVA.'] },
   { path: 'como-calcular-costo-real-prestamo-personal', service: 'creditocheck', title: 'Cómo calcular el costo real de un préstamo personal', intro: 'La tasa que te muestran casi nunca es lo que pagás. Con el monto que recibís en mano y la cuota total, se calcula el costo efectivo real.',
     points: ['Usá el monto que te depositan, no el monto "otorgado": los gastos de otorgamiento suben el costo.', 'Usá la cuota total que pagás, con IVA y seguros.', 'Compará siempre el CFT con IVA: la entidad está obligada a informarlo.', 'Con inflación, una cuota fija pesa cada mes menos.'] },
   { path: 'cft-que-es-costo-financiero-total', service: 'creditocheck', title: 'Qué es el CFT y por qué importa más que la TNA', intro: 'El costo financiero total (CFT) suma intereses, comisiones, seguros e impuestos. Es el único número que sirve para comparar préstamos entre sí.',
@@ -221,6 +229,8 @@ pitch['alquiler-claro'] = {
 };
 
 const alquilerCases = [
+  { path: 'aumento-alquiler-diciembre-2026', service: 'alquiler-claro', title: 'Aumento de alquiler en diciembre 2026: cómo calcularlo', intro: 'Si tu contrato ajusta en diciembre, el aumento depende del índice pactado y de cada cuánto actualiza. Calculalo con el ICL o el IPC oficial al día de hoy.',
+    points: ['Con ICL: se divide el índice del día del ajuste por el del inicio del período.', 'Con IPC: se usa la inflación acumulada de los meses del período publicados por el INDEC.', 'El BCRA publica el ICL con anticipación, así que el aumento se puede calcular antes de la fecha.', 'El aumento va sobre el alquiler, no sobre las expensas.'] },
   { path: 'aumento-alquiler-icl', service: 'alquiler-claro', title: 'Aumento de alquiler por ICL: cómo se calcula', intro: 'El ICL es el índice del BCRA para contratos de locación. El aumento sale de dividir el ICL del día del ajuste por el del inicio del período.',
     points: ['Se usa el ICL del día de inicio del período y el del día del ajuste.', 'El BCRA lo publica a diario.', 'Lo usan los contratos de la Ley 27.551 y muchos posteriores.', 'El aumento va sobre el alquiler, no sobre las expensas.'] },
   { path: 'aumento-alquiler-ipc', service: 'alquiler-claro', title: 'Aumento de alquiler por IPC (inflación)', intro: 'En los contratos que ajustan por inflación, el aumento es la variación acumulada del IPC del INDEC en los meses del período.',

@@ -338,7 +338,7 @@ const mock=(s,info)=>`<div class="mock" aria-hidden="true"><div class="mock-band
 const faqLd=info=>({'@context':'https://schema.org','@type':'FAQPage',mainEntity:info.faq.map(([q,a])=>({'@type':'Question',name:q,acceptedAnswer:{'@type':'Answer',text:a}}))});
 const caseUrl=c=>(['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(c.service)?'/reclamos/':'/guias/')+c.path;
 const visibleCases=()=>cases.filter(c=>shown().some(s=>s.slug===c.service));
-const SEO_UPDATED='2026-11-24';
+const SEO_UPDATED='2026-11-25';
 const crumbsLd=items=>({'@context':'https://schema.org','@type':'BreadcrumbList',itemListElement:items.map(([name,path],i)=>({'@type':'ListItem',position:i+1,name,item:origin+path}))});
 const articleLd=(title,description,path)=>({'@context':'https://schema.org','@type':'Article',headline:title,description,inLanguage:'es-AR',dateModified:SEO_UPDATED,mainEntityOfPage:origin+path,author:{'@type':'Organization',name:'Categoría Clara'},publisher:{'@type':'Organization',name:'Categoría Clara',logo:{'@type':'ImageObject',url:origin+'/og.png'}},image:origin+'/og.png'});
 const monoGuides=()=>visibleCases().filter(c=>c.service==='monotributocheck');

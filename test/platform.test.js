@@ -350,6 +350,31 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.equal((await get(privatePath+'/pdf')).status,409);
   assert.equal((await send('/arrepentimiento',{reference:'ref',email:'cliente@example.test'})).status,201);
 
+  // Precios y cupones desde el panel, con registro de cambios
+  assert.equal((await send('/admin/precio',{slug:'monotributocheck',precio:'7.900'})).status,403);
+  assert.equal((await send('/admin/precio',{slug:'monotributocheck',precio:'0,50'},admin)).status,422);
+  assert.equal((await send('/admin/precio',{slug:'no-existe',precio:'7.900'},admin)).status,422);
+  assert.equal((await send('/admin/precio',{slug:'monotributocheck',precio:'7.900'},admin)).status,303);
+  assert.match(await (await get('/servicios/monotributocheck')).text(),/\$\s?7\.900,00/);
+  assert.doesNotMatch(await (await send('/servicios/monotributocheck',{...mono,action:'preview'})).text(),/name="cupon"/);
+  assert.equal((await send('/admin/cupon',{code:'x',pct:'10'},admin)).status,422);
+  assert.equal((await send('/admin/cupon',{code:'lanza20',pct:'95'},admin)).status,422);
+  assert.equal((await send('/admin/cupon',{code:'lanza20',pct:'20',slug:'monotributocheck',max:'1'},admin)).status,303);
+  assert.equal((await send('/admin/cupon',{code:'LANZA20',pct:'10'},admin)).status,409);
+  assert.match(await (await send('/servicios/monotributocheck',{...mono,action:'preview'})).text(),/name="cupon"/);
+  assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:'NOEXISTE'})).status,422);
+  assert.equal((await send('/servicios/liquidacion-final',{...formValues['liquidacion-final'],action:'order',consent:'local-v1',email:'cupon@example.test',email2:'cupon@example.test',cupon:'lanza20'})).status,422);
+  assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:' lanza20 '})).status,303);
+  const withCoupon=await (await get('/admin',admin)).text();
+  assert.match(withCoupon,/\$\s?6\.320,00 <span class="muted small">\(LANZA20\)/);
+  assert.match(withCoupon,/monotributocheck: \$\s?7\.900,00/);
+  assert.match(withCoupon,/LANZA20: 20% en monotributocheck, 1 usos/);
+  assert.match(withCoupon,/Embudo por servicio<\/h2><p class="muted small">Período: <b>7 días<\/b>/);
+  assert.equal((await send('/admin/cupon/estado',{code:'LANZA20'},admin)).status,303);
+  assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:'LANZA20'})).status,422);
+  assert.equal((await send('/admin/precio',{slug:'monotributocheck',reset:'1'},admin)).status,303);
+  assert.match(await (await get('/servicios/monotributocheck')).text(),/\$\s?10,52/);
+
   // Respaldo
   const backupFile=join(dir,'respaldo.sqlite');
   const backup=spawn(process.execPath,['server.js','respaldo',backupFile],{env});
@@ -365,7 +390,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   let purged='';
   purge.stdout.on('data',chunk=>{purged+=chunk;});
   assert.equal((await once(purge,'exit'))[0],0);
-  assert.match(purged,/1 pedidos depurados/);
+  assert.match(purged,/2 pedidos depurados/); // la compra original y la del cupón
   assert.equal((await get(privatePath+'/pdf')).status,410);
   assert.match(await (await get(privatePath)).text(),/política de conservación/);
 });

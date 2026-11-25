@@ -1,7 +1,7 @@
 import {TABLE as MONO_TABLE,RECATEGORIZACION} from './monotributo.js';
 import {createServer} from 'node:http';
 import {createHash,randomBytes,randomUUID,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from 'node:crypto';
-import {existsSync,mkdirSync,readFileSync} from 'node:fs';
+import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {promisify} from 'node:util';
 import {openDatabase,atomic} from './db.js';
@@ -279,6 +279,18 @@ async function deliver() {
   } finally {delivering=false;}
 }
 setInterval(()=>deliver().catch(()=>console.error('Error en cola de correo')),15000).unref();
+const INDEXNOW_KEY='e1199d0c7bb97c888b899f433ad9bf21';
+async function pingIndexNow(){
+  if(env.INDEX_PUBLIC!=='1'||env.NODE_ENV==='test') return;
+  const marker=dbPath===':memory:'?null:join(dirname(dbPath),'indexnow-'+SEO_UPDATED);
+  if(marker&&existsSync(marker)) return;
+  const urls=['/','/guias',...shown().map(pathFor),...visibleCases().map(caseUrl)].map(p=>origin+p);
+  const host=new URL(origin).host;
+  const r=await fetch('https://api.indexnow.org/indexnow',{method:'POST',headers:{'Content-Type':'application/json; charset=utf-8'},body:JSON.stringify({host,key:INDEXNOW_KEY,keyLocation:origin+'/'+INDEXNOW_KEY+'.txt',urlList:urls}),signal:AbortSignal.timeout(20000)});
+  console.log('IndexNow',r.status,urls.length,'URLs');
+  if(marker&&r.status<300) writeFileSync(marker,new Date().toISOString());
+}
+if(!process.argv[2]&&env.NODE_ENV!=='test') setTimeout(()=>pingIndexNow().catch(e=>console.error('IndexNow:',e.message)),30000).unref();
 if(!process.argv[2]&&env.NODE_ENV!=='test') startIndices(dbPath===':memory:'?null:join(dirname(dbPath),'indices.json')).catch(()=>{});
 if(!process.argv[2]&&env.NODE_ENV!=='test') setInterval(()=>sweepPending().catch(()=>console.error('Error en el barrido de pagos')),120000).unref();
 if(!process.argv[2]) setInterval(()=>{try {purge();} catch {console.error('Error en la depuración');}},3600000).unref();
@@ -415,6 +427,7 @@ async function route(req,res) {
   }
   const icons={'/favicon.ico':'image/x-icon','/favicon.svg':'image/svg+xml','/apple-touch-icon.png':'image/png','/icon-192.png':'image/png','/icon-512.png':'image/png'};
   if(method==='GET'&&icons[path]) {res.writeHead(200,{'Content-Type':icons[path],'Cache-Control':'public, max-age=604800'});return res.end(readFileSync(new URL('./public'+path,import.meta.url)));}
+  if(method==='GET'&&path==='/e1199d0c7bb97c888b899f433ad9bf21.txt') return plain(res,200,'e1199d0c7bb97c888b899f433ad9bf21');
   if(method==='GET'&&path==='/manifest.webmanifest') return plain(res,200,JSON.stringify({name:'Categoría Clara',short_name:'Categoría Clara',start_url:'/',display:'browser',background_color:'#f6f2ea',theme_color:'#16181d',icons:[{src:'/icon-192.png',sizes:'192x192',type:'image/png'},{src:'/icon-512.png',sizes:'512x512',type:'image/png'}]}),'application/manifest+json');
   if(method==='GET'&&path==='/og.png') {res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(new URL('./public/og.png',import.meta.url)));}
   if(method==='GET'&&['/style.css','/site.js','/portal.js'].includes(path)) return plain(res,200,readFileSync(new URL('./public'+path,import.meta.url)),path.endsWith('css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8');

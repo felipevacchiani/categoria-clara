@@ -6,11 +6,12 @@ const money = v => new Intl.NumberFormat('es-AR', { style: 'currency', currency:
 const pct = v => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(v * 100) + '%';
 const fail = m => { throw new Error(m); };
 
-// Tasa mensual que iguala el valor actual de las cuotas con el monto recibido (bisección; 0 a 50% mensual).
+// Tasa mensual que iguala el valor actual de las cuotas con el monto recibido (bisección; -99,9% a 50% mensual).
+// Si las cuotas suman menos que lo recibido, la tasa es negativa (no 0%).
 export function tasaMensual(recibido, cuota, n) {
   const va = i => i === 0 ? cuota * n : cuota * (1 - Math.pow(1 + i, -n)) / i;
-  if (cuota * n <= recibido) return 0;
-  let lo = 0, hi = 0.5;
+  if (cuota * n === recibido) return 0;
+  let lo = cuota * n < recibido ? -0.999 : 0, hi = cuota * n < recibido ? 0 : 0.5;
   if (va(hi) > recibido) fail('La cuota es demasiado alta para el monto: revisá los datos.');
   for (let k = 0; k < 200; k++) { const mid = (lo + hi) / 2; if (va(mid) > recibido) lo = mid; else hi = mid; }
   return (lo + hi) / 2;
@@ -45,11 +46,15 @@ export function evaluateCredito(x) {
   const inf = x.inflacion / 100;
   const ofertas = [analiza('la oferta', x.capital, x.cuotaA, x.plazoA, inf)];
   if (x.comparar === 'si') { ofertas[0].nombre = 'la oferta A'; ofertas.push(analiza('la oferta B', x.capital, x.cuotaB, x.plazoB, inf)); }
-  const mejor = ofertas.length > 1 ? (ofertas[0].tea <= ofertas[1].tea ? ofertas[0] : ofertas[1]) : null;
+  // Las dos ofertas entregan el mismo monto: conviene la que cuesta menos en pesos de hoy con la inflación supuesta.
+  // La TEA se informa aparte: con plazos distintos, la de menor tasa puede costar más en pesos de hoy.
+  const mejor = ofertas.length > 1 ? (ofertas[0].real <= ofertas[1].real ? ofertas[0] : ofertas[1]) : null;
+  const otraOf = mejor ? (mejor === ofertas[0] ? ofertas[1] : ofertas[0]) : null;
+  const coincide = mejor && mejor.tea <= otraOf.tea;
   const o = ofertas[0];
   const lines = [
-    mejor ? `Resultado: conviene ${mejor.nombre}: su costo efectivo anual es ${pct(mejor.tea)}, contra ${pct((mejor === ofertas[0] ? ofertas[1] : ofertas[0]).tea)} de la otra.`
-      : `Resultado: el costo efectivo anual real de esta oferta es ${pct(o.tea)} (${pct(o.i)} por mes).`,
+    mejor ? `Resultado: con una inflación de ${pct(inf)} mensual conviene ${mejor.nombre}: sus cuotas valen ${money(mejor.real)} en pesos de hoy, contra ${money(otraOf.real)} de la otra.${coincide ? ' También tiene el menor costo efectivo anual.' : ` Ojo: ${otraOf.nombre} tiene menor costo efectivo anual (${pct(otraOf.tea)} contra ${pct(mejor.tea)}), pero por su plazo te cuesta más en pesos de hoy.`}`
+      : `Resultado: el costo efectivo anual de esta oferta es ${pct(o.tea)} (${pct(o.i)} por mes).`,
     `Monto recibido en mano: ${money(x.capital)}. Inflación mensual supuesta: ${pct(inf)}.`
   ];
   for (const f of ofertas) {
@@ -63,7 +68,8 @@ export function evaluateCredito(x) {
   if (mejor) {
     const otra = mejor === ofertas[0] ? ofertas[1] : ofertas[0];
     lines.push('--- COMPARACIÓN ---',
-      `- Por costo efectivo, conviene ${mejor.nombre}.`,
+      `- En pesos de hoy, con la inflación que ingresaste, conviene ${mejor.nombre}.`,
+      `- Por costo efectivo anual, la más barata es ${coincide ? mejor.nombre : otraOf.nombre}.${coincide ? '' : ' Si esperás que la inflación sea más alta, la oferta más larga gana terreno; si esperás que baje, conviene mirar la de menor costo efectivo.'}`,
       `- En pesos de hoy, ${mejor.nombre} te cuesta ${money(Math.abs(otra.real - mejor.real))} ${otra.real >= mejor.real ? 'menos' : 'más'} que la otra.${otra.real < mejor.real ? ' Pasa cuando una oferta tiene más cuotas: con inflación, pagar más tarde pesa menos. Si la inflación baja, esta ventaja se achica.' : ''}`,
       `- Diferencia en el total nominal: ${money(Math.abs(ofertas[0].total - ofertas[1].total))}. El total nominal solo sirve para comparar ofertas del mismo plazo.`);
   }

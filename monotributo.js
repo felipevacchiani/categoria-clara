@@ -9,19 +9,20 @@ export const TABLE = {
   vigencia: '2026-08-01',
   precioUnitarioMax: 716840.77,
   categorias: [
-    // cat, ingresos, superficie m2, energia kWh, alquileres, total servicios, total bienes
-    ['A', 12009410.45, 30, 3330, 2792886.15, 49527.18, 49527.18],
-    ['B', 17595182.74, 45, 5000, 2792886.15, 56379.08, 56379.08],
-    ['C', 24670494.31, 60, 6700, 3816944.41, 66020.12, 64530.58],
-    ['D', 30628651.43, 85, 10000, 3816944.41, 84612.93, 82564.81],
-    ['E', 36028231.33, 110, 13000, 4841002.66, 119811.45, 108267.51],
-    ['F', 45151659.41, 150, 16500, 4841002.66, 150784.21, 129930.65],
-    ['G', 53995798.87, 200, 20000, 5771964.69, 230312.94, 158815.05],
-    ['H', 81924660.37, 200, 20000, 8378658.45, 522706.68, 317895.01],
-    ['I', 91699761.90, 200, 20000, 8378658.45, 963747.86, 474992.78],
-    ['J', 105012519.20, 200, 20000, 8378658.45, 1167299.76, 580793.69],
-    ['K', 126610838.75, 200, 20000, 8378658.45, 1614446.04, 702103.24]
-  ].map(([cat, ingresos, superficie, energia, alquileres, servicios, bienes]) => ({ cat, ingresos, superficie, energia, alquileres, servicios, bienes }))
+    // cat, ingresos, superficie m2, energia kWh, alquileres, total servicios, total bienes,
+    // impuesto integrado servicios, impuesto integrado bienes, aporte SIPA, aporte obra social
+    ['A', 12009410.45, 30, 3330, 2792886.15, 49527.18, 49527.18, 5585.77, 5585.77, 18246.86, 25694.55],
+    ['B', 17595182.74, 45, 5000, 2792886.15, 56379.08, 56379.08, 10612.98, 10612.98, 20071.55, 25694.55],
+    ['C', 24670494.31, 60, 6700, 3816944.41, 66020.12, 64530.58, 18246.86, 16757.32, 22078.71, 25694.55],
+    ['D', 30628651.43, 85, 10000, 3816944.41, 84612.93, 82564.81, 29790.79, 27742.67, 24286.58, 30535.56],
+    ['E', 36028231.33, 110, 13000, 4841002.66, 119811.45, 108267.51, 55857.73, 44313.79, 26715.24, 37238.48],
+    ['F', 45151659.41, 150, 16500, 4841002.66, 150784.21, 129930.65, 78573.20, 57719.64, 29386.76, 42824.25],
+    ['G', 53995798.87, 200, 20000, 5771964.69, 230312.94, 158815.05, 142995.76, 71497.87, 41141.46, 46175.72],
+    ['H', 81924660.37, 200, 20000, 8378658.45, 522706.68, 317895.01, 409623.31, 204811.64, 57598.04, 55485.33],
+    ['I', 91699761.90, 200, 20000, 8378658.45, 963747.86, 474992.78, 814591.79, 325836.71, 80637.26, 68518.81],
+    ['J', 105012519.20, 200, 20000, 8378658.45, 1167299.76, 580793.69, 977510.14, 391004.07, 112892.16, 76897.46],
+    ['K', 126610838.75, 200, 20000, 8378658.45, 1614446.04, 702103.24, 1368514.20, 456171.40, 158049.02, 87882.82]
+  ].map(([cat, ingresos, superficie, energia, alquileres, servicios, bienes, impS, impB, sipa, os]) => ({ cat, ingresos, superficie, energia, alquileres, servicios, bienes, impS, impB, sipa, os }))
 };
 
 export const RECATEGORIZACION = { vence: '2027-02-05', periodo: 'enero a diciembre de 2026' };
@@ -45,9 +46,10 @@ export function evaluateMonotributo(x) {
   const actividad = x.actividad;
   const ingresos = x.ingresos + x.diciembre;
   const actual = idx(x.categoria);
+  const chica = x.poblacion === 'si' && x.superficie > 0; // la superficie no se considera en localidades de hasta 40.000 habitantes
   const params = [
     ['ingresos', 'Ingresos brutos de los últimos 12 meses', ingresos, money(ingresos)],
-    ['superficie', 'Superficie afectada a la actividad', x.superficie, `${x.superficie} m2`],
+    ['superficie', 'Superficie afectada a la actividad', chica ? 0 : x.superficie, chica ? `${x.superficie} m2, no se computa en localidades de hasta 40.000 habitantes` : `${x.superficie} m2`],
     ['energia', 'Energía eléctrica consumida en el año', x.energia, `${x.energia} kWh`],
     ['alquileres', 'Alquileres devengados en el año', x.alquileres, money(x.alquileres)]
   ].map(([key, label, value, shown]) => ({ key, label, value, shown, pos: catFor(key, value) }));
@@ -57,7 +59,10 @@ export function evaluateMonotributo(x) {
   const pos = excluido ? -1 : Math.max(...params.map(p => p.pos));
   const nueva = excluido ? null : TABLE.categorias[pos];
   const vieja = TABLE.categorias[actual];
-  const cuota = c => actividad === 'servicios' ? c.servicios : c.bienes;
+  // Cuota según la situación previsional (ARCA, notas de la tabla): quien aporta a otro régimen, los menores de 18
+  // y quienes solo alquilan bienes no pagan SIPA ni obra social; los jubilados no pagan obra social.
+  const ap = APORTES[x.aportes] ? x.aportes : 'general';
+  const cuota = c => (actividad === 'servicios' ? c.impS : c.impB) + (ap === 'general' || ap === 'jubilado' ? c.sipa : 0) + (ap === 'general' ? c.os : 0);
   const vence = fmt(RECATEGORIZACION.vence);
 
   const situacion = excluido ? 'Quedarías fuera del Monotributo con estos datos.'
@@ -69,7 +74,7 @@ export function evaluateMonotributo(x) {
     `Resultado: ${situacion}`,
     `Plazo: la recategorización vence el ${vence} y toma lo facturado de ${RECATEGORIZACION.periodo}.`,
     '--- TU CATEGORÍA, PARÁMETRO POR PARÁMETRO ---',
-    ...params.map(p => `- ${p.label}: ${p.shown}. ${p.pos === -1 ? 'Supera el máximo del régimen.' : p.value ? `Corresponde a la categoría ${TABLE.categorias[p.pos].cat}.` : 'No informado: no se tuvo en cuenta.'}`),
+    ...params.map(p => `- ${p.label}: ${p.shown}. ${p.pos === -1 ? 'Supera el máximo del régimen.' : p.value ? `Corresponde a la categoría ${TABLE.categorias[p.pos].cat}.` : p.key === 'superficie' && chica ? 'No define la categoría (salvo excepciones de ARCA para algunas actividades).' : 'No informado: no se tuvo en cuenta.'}`),
     ...(actividad === 'bienes' ? [`- Precio unitario máximo de venta: ${money(x.precio)}. ${precioExcedido ? 'Supera el máximo de ' + money(TABLE.precioUnitarioMax) + '.' : 'Dentro del máximo de ' + money(TABLE.precioUnitarioMax) + '.'}`] : []),
     excluido ? 'La categoría la define el parámetro más alto, y al menos uno supera el máximo del régimen.' : `La categoría la define el parámetro más alto: ${params.filter(p => p.pos === pos).map(p => p.label.toLowerCase()).join(' y ')}.`
   ];
@@ -89,6 +94,7 @@ export function evaluateMonotributo(x) {
       '--- CUOTA MENSUAL ---',
       `- Categoría ${vieja.cat} (actual): ${money(cuota(vieja))} por mes.`,
       ...(pos !== actual ? [`- Categoría ${nueva.cat}: ${money(cuota(nueva))} por mes. Diferencia: ${diferencia > 0 ? '+' : ''}${money(diferencia)} por mes; ${diferencia > 0 ? '+' : ''}${money(diferencia * 6)} en el semestre de febrero a julio.`] : []),
+      `- Composición en tu caso: ${APORTES[ap].detalle}.${ap === 'general' ? ' Si sumás adherentes a la obra social, pagás el aporte de obra social una vez más por cada uno.' : ''}`,
       'Montos con la tabla vigente; ARCA los actualiza por inflación antes de la recategorización.',
       '--- CUÁNTO PODÉS FACTURAR ---',
       margenActual > 0
@@ -120,6 +126,13 @@ export function evaluateMonotributo(x) {
   return lines.filter(Boolean);
 }
 
+const APORTES = {
+  general: { label: 'Solo aporto por el Monotributo', detalle: 'impuesto integrado + jubilación (SIPA) + obra social' },
+  otro: { label: 'También trabajo en relación de dependencia o aporto a una caja profesional', detalle: 'solo el impuesto integrado: quien aporta a otro régimen previsional no paga SIPA ni obra social en el Monotributo' },
+  jubilado: { label: 'Soy jubilado o jubilada', detalle: 'impuesto integrado + jubilación (SIPA): los jubilados no pagan obra social. Si te jubilaste antes de 07/1994, tampoco pagás SIPA' },
+  exento: { label: 'Solo alquilo bienes, o soy menor de 18 años', detalle: 'solo el impuesto integrado: no pagás SIPA ni obra social' }
+};
+const POBLACION = { no: { label: 'No, más de 40.000 habitantes' }, si: { label: 'Sí, hasta 40.000 habitantes' } };
 const LOCAL = { no: { label: 'No, trabajo sin local (desde casa, en la calle, online)' }, si: { label: 'Sí, tengo local, oficina o depósito' } };
 export const monotributoFields = num => [
   choice('actividad', '¿A qué te dedicás?', ACTIVIDAD),
@@ -128,9 +141,11 @@ export const monotributoFields = num => [
   { ...num('diciembre', 'Lo que pensás facturar en diciembre'), unit: 'pesos', hint: 'Una estimación alcanza. Si no vas a facturar, poné 0.' },
   choice('local', '¿Tenés un local para la actividad?', LOCAL),
   { ...num('superficie', 'Superficie del local'), unit: 'm²', show: 'local:si' },
+  { ...choice('poblacion', '¿El local está en una ciudad o pueblo de hasta 40.000 habitantes?', POBLACION), show: 'local:si' },
   { ...num('energia', 'Luz que consumió el local en el año'), unit: 'kWh', show: 'local:si', hint: 'Sumá los kWh de las facturas de luz del local de 2026.' },
   { ...num('alquileres', 'Alquiler que pagaste por el local en el año'), unit: 'pesos', show: 'local:si', hint: 'Si el local es tuyo, poné 0.' },
   { ...num('precio', 'Precio del producto más caro que vendés'), unit: 'pesos', show: 'actividad:bienes' },
+  choice('aportes', '¿Cómo aportás a la jubilación?', APORTES),
   choice('billeteras', '¿Cobrás en billeteras o transferencias sin facturar?', SINO)
 ];
 

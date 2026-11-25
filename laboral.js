@@ -25,10 +25,18 @@ function antiguedad(desde, hasta) {
   return { anios: Math.floor(meses / 12), meses: meses % 12, total: meses };
 }
 
+// ¿La antigüedad entre dos fechas (inclusive el día final) supera N años? Exactamente N años no los supera.
+// Arts. 150 y 231 LCT: "no exceda de" 5, 10 y 20 años / "superior a" 5 años.
+function excede(desde, hasta, n) {
+  const lim = new Date(utc(desde));
+  lim.setUTCFullYear(lim.getUTCFullYear() + n);
+  return utc(hasta) + DAY > lim.getTime();
+}
+
 // Días de vacaciones anuales según la antigüedad al 31/12 del año (art. 150 LCT).
 function diasVacaciones(ingreso, anio) {
-  const { anios } = antiguedad(ingreso, `${anio}-12-31`);
-  return anios < 5 ? 14 : anios < 10 ? 21 : anios < 20 ? 28 : 35;
+  const al = `${anio}-12-31`;
+  return !excede(ingreso, al, 5) ? 14 : !excede(ingreso, al, 10) ? 21 : !excede(ingreso, al, 20) ? 28 : 35;
 }
 
 // Semestre del aguinaldo que contiene una fecha.
@@ -94,7 +102,7 @@ export function evaluateLiquidacion(x) {
   let base = S, topeAplicado = false;
   if (sinCausa) {
     if (x.preaviso === 'no') {
-      const meses = ant.total >= 60 ? 2 : 1;
+      const meses = excede(x.ingreso, x.egreso, 5) ? 2 : 1; // art. 231: dos meses solo si supera 5 años
       const pre = S * meses;
       items.push(['Indemnización sustitutiva del preaviso', pre, false, `${meses} ${meses > 1 ? 'meses' : 'mes'} de sueldo (${meses > 1 ? 'más' : 'hasta'} de 5 años de antigüedad)`]);
       items.push(['SAC sobre preaviso', r2(pre / 12), false, 'un doceavo del preaviso']);

@@ -43,9 +43,18 @@ function ipcFactor(desde, hasta, n) {
 function iclFactor(desde, hasta) {
   const a = icl(desde), last = iclLast();
   if (!a || !last) fail('Los índices no están disponibles en este momento. Probá de nuevo en unos minutos.');
-  let b = icl(hasta), estimado = false;
-  if (hasta > last[0]) { b = last; estimado = true; }
-  return { factor: b[1] / a[1], detalle: `ICL del ${fmt(b[0])} (${b[1].toFixed(2)}) / ICL del ${fmt(a[0])} (${a[1].toFixed(2)})`, estimado, ultimo: fmt(last[0]) };
+  if (hasta <= last[0]) {
+    const b = icl(hasta);
+    return { factor: b[1] / a[1], detalle: `ICL del ${fmt(b[0])} (${b[1].toFixed(2)}) / ICL del ${fmt(a[0])} (${a[1].toFixed(2)})`, estimado: false, ultimo: fmt(last[0]) };
+  }
+  // Ajuste posterior al último dato: se proyecta el ICL con su ritmo diario de los últimos 90 días
+  // (usar el último valor sin proyectar subestimaría el aumento).
+  const DAY = 86400000, t = d => Date.parse(d + 'T00:00:00Z');
+  const ref = icl(new Date(t(last[0]) - 90 * DAY).toISOString().slice(0, 10));
+  const dias = (t(hasta) - t(last[0])) / DAY;
+  const ritmo = ref && ref[0] < last[0] ? Math.pow(last[1] / ref[1], 1 / ((t(last[0]) - t(ref[0])) / DAY)) : 1;
+  const proy = last[1] * Math.pow(ritmo, dias);
+  return { factor: proy / a[1], detalle: `ICL proyectado al ${fmt(hasta)} (${proy.toFixed(2)}, con el ritmo de los últimos 90 días desde el último dato del ${fmt(last[0])}: ${last[1].toFixed(2)}) / ICL del ${fmt(a[0])} (${a[1].toFixed(2)})`, estimado: true, ultimo: fmt(last[0]) };
 }
 
 export function evaluateAlquiler(x, hoy = new Date().toISOString().slice(0, 10)) {
@@ -60,7 +69,7 @@ export function evaluateAlquiler(x, hoy = new Date().toISOString().slice(0, 10))
   const nuevo = x.monto * f.factor;
   const yaPaso = ajuste <= hoy;
   const lines = [
-    `Resultado: ${yaPaso ? 'desde el' : 'a partir del'} ${fmt(ajuste)} tu alquiler pasa de ${money(x.monto)} a ${money(nuevo)} (aumento del ${pct(f.factor - 1)})${f.estimado ? ', estimado con el último índice publicado' : ''}.`,
+    `Resultado: ${yaPaso ? 'desde el' : 'a partir del'} ${fmt(ajuste)} tu alquiler pasa de ${money(x.monto)} a ${money(nuevo)} (aumento del ${pct(f.factor - 1)})${f.estimado ? ', estimado: el índice de esa fecha todavía no está publicado' : ''}.`,
     `Contrato actualizado por ${x.indice.toUpperCase()}, ${PERIODO[x.periodo].label.toLowerCase()}. Monto vigente desde el ${fmt(x.desde)}.`,
     '--- CÓMO SE CALCULA ---',
     `- Índice: ${f.detalle}.`,

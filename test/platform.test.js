@@ -24,7 +24,7 @@ const formValues={
   'compras-exterior':{precio:'500',envio:'20',arancel:'a20',cupo:'si',cambio:'1.000'},
   'ganancias-claro':{sueldo:'5.000.000',conyuge:'no',hijos:'0',hijos50:'si',alquiler:'0',domestico:'0',prepaga:'0'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
-  'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',billeteras:'si'},
+  'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',aportes:'general',billeteras:'si'},
   'liquidacion-final':{motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'},
   'aguinaldo':{sueldo:'1.200.000',ingreso:'2026-09-01',pago:'2026-12-31'},
   'importafacil':{mercaderia:'100',flete:'20',seguro:'5',cambio:'1000',cargos:'1000'},
@@ -89,7 +89,7 @@ test('MonotributoCheck: categoría por parámetro, margen, exclusión y resumen 
   assert.match(up,/quedás a \$ 3\.128\.651,43 del tope de la categoría D/);
   assert.match(up,/ARCA cruza/);
   assert.match(text({categoria:'D',ingresos:'20000000',diciembre:'1000000',billeteras:'no'}),/podés facturar hasta \$ 10\.628\.651,43/);
-  assert.match(text({categoria:'A',ingresos:'9000000',diciembre:'800000',local:'si',superficie:'50'}),/subís de la categoría A a la C[\s\S]*define el parámetro más alto: superficie/);
+  assert.match(text({categoria:'A',ingresos:'9000000',diciembre:'800000',local:'si',poblacion:'no',superficie:'50'}),/subís de la categoría A a la C[\s\S]*define el parámetro más alto: superficie/);
   assert.match(text({categoria:'E',ingresos:'9000000',diciembre:'800000'}),/bajás de la categoría E a la A/);
   assert.match(text({categoria:'C',ingresos:'20000000',diciembre:'1000000'}),/No tenés que recategorizarte: seguís en la categoría C/);
   assert.match(text({ingresos:'130000000'}),/fuera del Monotributo[\s\S]*supera el máximo de la categoría K/);
@@ -101,13 +101,20 @@ test('MonotributoCheck: categoría por parámetro, margen, exclusión y resumen 
   assert.equal(evaluate(mono,{...base,ingresos:'25.000.000',diciembre:'2.500.000,00'}).input.ingresos,25000000);
   assert.equal(evaluate(mono,{...base,diciembre:'1.234,56'}).input.diciembre,1234.56);
   assert.equal(evaluate(mono,{...base,local:'no',superficie:'500'}).input.superficie,0);
-  assert.equal(evaluate(mono,{...base,local:'si',superficie:'500'}).input.superficie,500);
+  assert.equal(evaluate(mono,{...base,local:'si',poblacion:'no',superficie:'500'}).input.superficie,500);
   assert.equal(evaluate(mono,{...base,actividad:'servicios',precio:'999999999'}).input.precio,0);
   assert.throws(()=>evaluate(mono,{...base,ingresos:'abc'}),/Ejemplo: 1\.250\.000,50/);
   const preview=mono.teaser(evaluate(mono,base).lines);
   assert.equal(preview.facts[0][1],'Sí, tenés que recategorizarte (subís de categoría).');
   assert.doesNotMatch(JSON.stringify(preview),/categoría D|84\.612/);
   for(const line of evaluate(mono,base).lines) assert.match(line,/^[\x20-\x7e\xa0-\xff]*$/);
+  // Localidades de hasta 40.000 habitantes: la superficie no define la categoría
+  assert.match(text({categoria:'A',ingresos:'9000000',diciembre:'800000',local:'si',poblacion:'si',superficie:'50'}),/seguís en la categoría A[\s\S]*no se computa en localidades/);
+  // Cuota según situación previsional (tabla ARCA 1/8/2026, categoría D servicios)
+  assert.match(text({aportes:'otro'}),/Categoría D: \$ 29\.790,79 por mes/);
+  assert.match(text({aportes:'jubilado'}),/Categoría D: \$ 54\.077,37 por mes/);
+  assert.match(text({aportes:'exento',actividad:'bienes'}),/Categoría D: \$ 27\.742,67 por mes/);
+  assert.throws(()=>evaluate(mono,{...base,aportes:''}),/Completá el campo/);
 });
 function signed(id,secret='secret'){
   const ts='1700000000';
@@ -287,7 +294,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(sheet,/\$\s?10,52/);
   assert.match(sheet,/Ver resultado gratis/);
   assert.doesNotMatch(sheet,/antes de vender|contador matriculado/);
-  assert.equal((await fetch(local+'/eventos/inicio',{method:'POST',body:new URLSearchParams({slug:'monotributocheck',origen:guide})})).status,204);
+  assert.equal((await fetch(local+'/eventos/inicio',{method:'POST',headers:{Origin:origin},body:new URLSearchParams({slug:'monotributocheck',origen:guide})})).status,204);
   assert.equal((await send('/servicios/monotributocheck',{...mono,action:'preview',origen:guide})).status,200);
 
   // Resultado gratis sin la categoría ni montos

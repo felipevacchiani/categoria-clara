@@ -1,15 +1,15 @@
 // Ganancias Claro: impuesto a las Ganancias de un empleado en relación de dependencia (cuarta categoría), período fiscal 2026.
-// Valores oficiales de ARCA: escala del art. 94 "período anual 2026" y deducciones del art. 30 acumuladas a diciembre 2026
-// (régimen de retención julio a diciembre 2026). Se actualizan cada semestre. Solo caracteres Latin-1 en las líneas.
+// Valores oficiales de ARCA para la liquidación anual 2026: escala del art. 94 "período anual 2026" y deducciones
+// del art. 30 "período anual 2026", más la deducción especial adicional de 1/12 de a), b) y c) ap. 2. Solo caracteres Latin-1 en las líneas.
 import { choice } from './reclamos.js';
 
 export const TABLA = {
-  id: 'ARCA, período fiscal 2026 (escala art. 94 anual y deducciones art. 30 acumuladas a diciembre)',
-  gni: 5585736.93,
-  especial: 26811537.29, // art. 30 inc. c) ap. 2, relación de dependencia
-  conyuge: 5260643.86,
-  hijo: 2652961.90,
-  hijoInc: 5305923.78,
+  id: 'ARCA, liquidación anual 2026 (escala art. 94 y deducciones art. 30 del período anual)',
+  gni: 6019671.36,
+  especial: 28894422.56, // art. 30 inc. c) ap. 2, relación de dependencia
+  conyuge: 5669323.06,
+  hijo: 2859060.31,
+  hijoInc: 5718120.60,
   aportes: 0.17,
   escala: [
     [0, 0, 0.05], [2336953.69, 116847.68, 0.09], [4673907.36, 327173.52, 0.12], [7010861.05, 607607.96, 0.15],
@@ -55,7 +55,9 @@ export function evaluateGanancias(x) {
   const share = x.hijos50 === 'si' ? 0.5 : 1;
   const conyuge = x.conyuge === 'si' ? T.conyuge : 0;
   const hijos = x.hijos * T.hijo * share;
-  const personales = T.gni + T.especial + conyuge + hijos;
+  const base12 = T.gni + T.especial + conyuge + hijos;
+  const doceava = base12 / 12; // deducción especial adicional: 1/12 de a), b) y c) ap. 2 (tabla anual ARCA)
+  const personales = base12 + doceava;
   const siradig = alquiler + domestico + prepaga;
   const base = Math.max(0, neta - siradig - personales);
   const imp = impuesto(base);
@@ -71,7 +73,7 @@ export function evaluateGanancias(x) {
     `- Ingreso bruto anual (12 sueldos más aguinaldo): ${money(bruto)}.`,
     `- Menos aportes de ley (17%): ${money(aportes)}. Ganancia neta: ${money(neta)}.`,
     `- Menos deducciones que cargás en SiRADIG: ${money(siradig)}${siradig ? ` (alquiler ${money(alquiler)}, servicio doméstico ${money(domestico)}, prepaga ${money(prepaga)})` : ''}.`,
-    `- Menos deducciones personales: ${money(personales)} (mínimo no imponible ${money(T.gni)}, deducción especial ${money(T.especial)}${conyuge ? `, cónyuge ${money(conyuge)}` : ''}${hijos ? `, hijos ${money(hijos)}` : ''}).`,
+    `- Menos deducciones personales: ${money(personales)} (mínimo no imponible ${money(T.gni)}, deducción especial ${money(T.especial)}, deducción especial adicional de un doceavo ${money(doceava)}${conyuge ? `, cónyuge ${money(conyuge)}` : ''}${hijos ? `, hijos ${money(hijos)}` : ''}).`,
     `- Ganancia sujeta a impuesto: ${money(base)}.`,
     `- Impuesto según la escala del art. 94: ${money(imp)}.`,
     '--- CUÁNTO TE AHORRA EL SIRADIG ---',

@@ -28,6 +28,8 @@ if(env.DATA_KEY&&!/^[a-f0-9]{64}$/i.test(env.DATA_KEY)) throw Error('DATA_KEY de
 const key=env.DATA_KEY?Buffer.from(env.DATA_KEY,'hex'):null;
 const retention=Number(env.RETENTION_DAYS||0);
 if(env.RETENTION_DAYS&&!(Number.isInteger(retention)&&retention>=30)) throw Error('RETENTION_DAYS debe ser un entero de 30 o más.');
+// La política de privacidad promete borrar el contenido de los informes: en modo comercial la depuración es obligatoria.
+if(env.MP_MODE==='live'&&!retention) throw Error('MP_MODE=live exige RETENTION_DAYS (la política vigente promete 365).');
 if(live&&(!secure||!key||!token||!env.MP_WEBHOOK_SECRET||!env.MP_COLLECTOR_ID||!release.policyVersion||!release.terms||!release.privacy||!release.business||!release.support||!env.RESEND_KEY||!env.MAIL_FROM)) throw Error('Configuración comercial incompleta. Consultá README.md.');
 if(dbPath!==':memory:') mkdirSync(dirname(dbPath),{recursive:true,mode:0o700});
 process.umask(0o077);
@@ -134,7 +136,8 @@ function takeToken(raw,purpose,consume=true){
   if(row&&consume) sql('DELETE FROM account_tokens WHERE digest=?',row.digest);
   return row?one('SELECT * FROM users WHERE id=?',row.user_id):null;
 }
-const hasPortal=account=>Boolean(account&&(admin(account)||one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',account.id)));
+// El portal exige haber probado el control del correo: una contraseña creada sin verificar no abre comprobantes.
+const hasPortal=account=>Boolean(account&&(admin(account)||(verified(account)&&one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',account.id))));
 function portalInvite(order){
   const owner=one('SELECT email,password FROM users WHERE id=?',order.user_id);
   if(!owner) return '';
@@ -461,7 +464,8 @@ async function route(req,res) {
 ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" value="${esc(prefill)}" required></label><label>Contraseña <small>(mínimo 10 caracteres)</small><input name="password" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label>Repetí la contraseña<input name="password2" type="password" autocomplete="new-password" minlength="10" maxlength="128" required></label><label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button>Crear cuenta</button>`)}</section>
 <aside class="panel aside" id="ingresar"><h2>Ingresar</h2>${post('/cuenta/ingresar',`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" value="${esc(prefill)}" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" maxlength="128" required></label><button>Ingresar</button>`)}<p class="small"><a href="/cuenta/olvide">Olvidé mi contraseña</a></p>
 <h3>Qué incluye el portal</h3>${checks(['Cargar facturas y notas de crédito, o importar el CSV de Mis Comprobantes','Ver cuánto llevás facturado y en qué categoría quedarías','Saber cuánto te falta para el tope de tu categoría','Tener todo guardado y verlo desde el celu o la compu'])}<p class="small">¿Todavía no compraste? El portal viene incluido con el <a href="/servicios/monotributocheck">informe de recategorización</a>.</p></aside></div>`,{canonical:'/mi-facturacion',description:'Portal para gestionar tu Monotributo: cargá tus facturas y mirá en tiempo real cuánto llevás facturado y en qué categoría quedarías.'});
-    const pending=!verified(user)?`<div class="panel wide note-box verify"><p><b>Confirmá tu correo.</b> Te mandamos un enlace a ${esc(user.email)}. Sirve para recuperar la cuenta si olvidás la contraseña.</p>${post('/cuenta/reenviar','<button class="ghost">Reenviar el correo</button>')}</div>`:'';
+    const pending=!verified(user)?`<div class="panel wide note-box verify"><p><b>Confirmá tu correo.</b> Te mandamos un enlace a ${esc(user.email)}. Lo pedimos para abrir el portal y para recuperar la cuenta si olvidás la contraseña.</p>${post('/cuenta/reenviar','<button class="ghost">Reenviar el correo</button>')}</div>`:'';
+    if(!verified(user)&&!admin(user)&&one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',user.id)) return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}<section class="panel wide note-box"><h2>Falta un paso</h2><p>Tu compra ya está asociada a este correo. Abrí el enlace que te mandamos para confirmar que el correo es tuyo y se activa el portal.</p></section>`,{canonical:'/mi-facturacion'});
     if(!hasPortal(user)) return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}<section class="panel wide note-box"><h2>El portal viene con tu informe</h2><p>Esta cuenta todavía no tiene una compra. Al comprar el informe de recategorización (${ars(price('monotributocheck'))}) con este mismo correo, se activa el portal para gestionar tu Monotributo todo el año.</p><a class="button" href="/servicios/monotributocheck">Calcular mi categoría</a><p class="small muted">¿Compraste con otro correo? Salí e ingresá con ese.</p></section>`,{canonical:'/mi-facturacion'});
     const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
     return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}
@@ -705,6 +709,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     ${landing.steps?`<section class="block"><h2>Paso a paso en ARCA</h2><ol class="howto">${landing.steps.map(([t,d])=>`<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ol></section>`:''}${stepsHtml(info)}${faqHtml(guideFaq)}${relatedGuides(landing.path,s.slug)}`,{canonical:path,description,jsonld:[articleLd(landing.title,description,path),crumbsLd([['Inicio','/'],...(!isReclamo(s)?[['Guías','/guias']]:[]),[landing.title,path]]),serviceLd(landing.title,description,path,cents),faqLd(guideFaq)]});
   }
   if(method==='POST'&&path==='/eventos/inicio'){
+    if(req.headers.origin!==origin) return plain(res,204,'');
     limit(req,'beacon',120);
     const chunks=[];let size=0;
     for await(const chunk of req){size+=chunk.length;if(size>1024) return plain(res,413,'');chunks.push(chunk);}

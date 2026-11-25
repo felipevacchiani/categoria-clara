@@ -1,3 +1,4 @@
+import { iclLast, ipcLast } from './indices.js';
 import { extra, enrich } from './guias.js';
 // Contenido comercial de las páginas públicas. Solo los servicios listados acá se muestran en el sitio.
 export const pitch = {
@@ -153,6 +154,10 @@ pitch.aguinaldo = {
 };
 
 const laboralCases = [
+  { path: 'aguinaldo-si-renuncio', service: 'aguinaldo', title: 'Aguinaldo si renunciás: cuánto te corresponde', intro: 'Si renunciás antes de diciembre o de junio, el aguinaldo proporcional se cobra con la liquidación final. Calculá cuánto es.',
+    points: ['Se calcula como la mitad del mejor sueldo del semestre, proporcional a los días trabajados.', 'No se pierde por renunciar: es un derecho ya generado.', 'Se paga junto con la liquidación final, dentro de los 4 días hábiles.', 'También corresponde el aguinaldo sobre las vacaciones no gozadas.'] },
+  { path: 'preaviso-cuanto-corresponde', service: 'liquidacion-final', title: 'Preaviso: cuánto te corresponde si te despiden sin aviso', intro: 'Si te despiden sin preaviso, te tienen que pagar una indemnización sustitutiva más la integración del mes. Cuánto depende de tu antigüedad.',
+    points: ['Hasta 5 años de antigüedad: 1 mes de sueldo.', 'Más de 5 años: 2 meses de sueldo.', 'Si el despido no es el último día del mes, se suma la integración de los días que faltan, más su aguinaldo.', 'En el período de prueba no corresponde preaviso (Ley 27.802).'] },
   { path: 'aguinaldo-proporcional-como-se-calcula', service: 'aguinaldo', title: 'Aguinaldo proporcional: cómo se calcula si no trabajaste el semestre completo', intro: 'Si entraste o te fuiste a mitad de semestre, el aguinaldo se paga en proporción a los días trabajados. Calculalo gratis.',
     points: ['Se toma la mitad del mejor sueldo bruto del semestre.', 'Se multiplica por los días trabajados y se divide por los días del semestre (181 o 184).', 'Si te fuiste, se cobra con la liquidación final.', 'Lleva los mismos descuentos que el sueldo: 17%.'] },
   { path: 'me-despidieron-en-periodo-de-prueba', service: 'liquidacion-final', title: 'Me despidieron en el período de prueba: qué me tienen que pagar', intro: 'Con la Ley 27.802, en el período de prueba no hay indemnización ni preaviso, pero sí te deben todo lo que trabajaste. Calculá cuánto.',
@@ -229,6 +234,9 @@ pitch['alquiler-claro'] = {
 };
 
 const alquilerCases = [
+  { path: 'icl-hoy-indice-contratos-de-locacion', service: 'alquiler-claro', title: 'ICL hoy: valor del Índice para Contratos de Locación',
+    get intro() { const l = iclLast(); return l ? `El último ICL publicado por el BCRA es ${l[1].toFixed(2).replace('.', ',')} (${l[0].split('-').reverse().join('/')}). Se actualiza todos los días y es la base del aumento de muchos contratos de alquiler.` : 'El ICL lo publica el BCRA todos los días y es la base del aumento de muchos contratos de alquiler.'; },
+    get points() { const p = ipcLast(); return ['El aumento por ICL es el cociente entre el índice del día del ajuste y el del inicio del período.', 'El BCRA publica el ICL con anticipación: se conoce antes de la fecha del aumento.', p ? `Último IPC del INDEC cargado: ${p[0].split('-').reverse().join('/')}.` : 'Los contratos más nuevos pueden ajustar por IPC del INDEC.', 'Calculá el aumento de tu contrato con el índice oficial.']; } },
   { path: 'aumento-alquiler-diciembre-2026', service: 'alquiler-claro', title: 'Aumento de alquiler en diciembre 2026: cómo calcularlo', intro: 'Si tu contrato ajusta en diciembre, el aumento depende del índice pactado y de cada cuánto actualiza. Calculalo con el ICL o el IPC oficial al día de hoy.',
     points: ['Con ICL: se divide el índice del día del ajuste por el del inicio del período.', 'Con IPC: se usa la inflación acumulada de los meses del período publicados por el INDEC.', 'El BCRA publica el ICL con anticipación, así que el aumento se puede calcular antes de la fecha.', 'El aumento va sobre el alquiler, no sobre las expensas.'] },
   { path: 'aumento-alquiler-icl', service: 'alquiler-claro', title: 'Aumento de alquiler por ICL: cómo se calcula', intro: 'El ICL es el índice del BCRA para contratos de locación. El aumento sale de dividir el ICL del día del ajuste por el del inicio del período.',
@@ -259,6 +267,8 @@ pitch['compras-exterior'] = {
 };
 
 const exteriorCases = [
+  { path: 'franquicia-courier-cuantos-envios-por-ano', service: 'compras-exterior', title: 'Franquicia de courier: cuántos envíos por año sin aranceles', intro: 'Cada persona tiene 5 envíos por año con franquicia de US$ 400 cada uno. Pasado ese cupo, todo paga aranceles.',
+    points: ['5 envíos por año calendario y por persona.', 'Hasta US$ 400 por envío sin derechos ni tasa de estadística: solo IVA.', 'Máximo 3 unidades de la misma especie por envío.', 'Cada integrante de la familia tiene su propio cupo.'] },
   { path: 'cuanto-pago-de-impuestos-compras-shein-temu-amazon', service: 'compras-exterior', title: 'Cuánto pagás de impuestos en Shein, Temu y Amazon', intro: 'Con el régimen vigente, los envíos de hasta US$ 400 pagan solo IVA. Calculá el costo final de tu compra antes de confirmarla.',
     points: ['Franquicia de US$ 400 por envío, 5 envíos por año.', 'Dentro de la franquicia: solo IVA del 21%.', 'Sobre el excedente: derecho de importación, tasa de estadística del 3% e IVA.', 'Tope de US$ 3.000 por envío.'] }
 ];
@@ -290,6 +300,8 @@ pitch['ganancias-claro'] = {
 };
 
 const gananciasCases = [
+  { path: 'deducir-alquiler-ganancias', service: 'ganancias-claro', title: 'Cómo deducir el alquiler de Ganancias', intro: 'Si alquilás tu vivienda y pagás Ganancias, podés deducir el 40% de lo que pagás. Se carga en SiRADIG con el contrato y los comprobantes.',
+    points: ['Se deduce el 40% del alquiler, con tope en el mínimo no imponible anual.', 'Tenés que ser inquilino de tu casa y no tener otra vivienda propia.', 'Se carga en SiRADIG mes a mes o una vez con todos los comprobantes.', 'Si no la cargás, te retienen de más.'] },
   { path: 'desde-que-sueldo-se-paga-ganancias-2026', service: 'ganancias-claro', title: 'Desde qué sueldo se paga Ganancias en 2026', intro: 'El piso depende de tu familia y de lo que deduzcas. Calculá con tu sueldo si pagás y cuánto.',
     points: ['Se suman 12 sueldos más el aguinaldo y se restan los aportes.', 'Se restan el mínimo no imponible, la deducción especial y las cargas de familia.', 'Alquiler, prepaga y servicio doméstico bajan el impuesto si los cargás en SiRADIG.', 'Sobre lo que queda se aplica la escala del 5% al 35%.'] },
   { path: 'como-cargar-siradig-deducciones', service: 'ganancias-claro', title: 'Cómo cargar el SiRADIG para pagar menos Ganancias', intro: 'Si no informás tus deducciones, tu empleador te retiene como si no las tuvieras. Cargarlas en SiRADIG es gratis y se hace online.',

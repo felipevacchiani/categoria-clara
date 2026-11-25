@@ -254,7 +254,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(await (await get('/mi-facturacion',ana)).text(),/El portal viene con tu informe/);
   assert.equal((await get('/api/facturacion',ana)).status,403);
   {const w=new (await import('node:sqlite')).DatabaseSync(env.DB_PATH);
-   w.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES ('orden-ana',(SELECT id FROM users WHERE email='ana@example.test'),'monotributocheck','1.0.0',1052,'ready','x','2026-11-23T00:00:00Z','local-v1','test','pago-1')").run(); w.close();}
+   w.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES ('orden-ana',(SELECT id FROM users WHERE email='ana@example.test'),'monotributocheck','1.1.0',1052,'ready','x','2026-11-23T00:00:00Z','local-v1','test','pago-1')").run(); w.close();}
   const portal=await (await get('/mi-facturacion',ana)).text();
   assert.match(portal,/id="portal"/); assert.match(portal,/src="\/portal.js"/); assert.match(portal,/<option value="K">/); assert.match(portal,/ana@example.test/);
   const api=(path,body,cookie=ana,extra={})=>fetch(local+path,{method:'POST',headers:{Origin:origin,'Content-Type':'application/json',Cookie:cookie,...extra},body:JSON.stringify(body)});

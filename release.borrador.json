@@ -9,34 +9,34 @@
   "privacy": "Responsable. Felipe Ezequiel Vacchiani, CUIT 20-38419418-5, con domicilio en Córdoba, Argentina. Contacto para temas de privacidad: soporte@categoriaclara.com.ar.\nQué datos tratamos, para qué y por cuánto tiempo.\n- Compras: tu correo, para enviarte el enlace privado de tu compra y reenviártelo si lo pedís; los datos que cargás para el informe (por ejemplo, montos facturados y parámetros de tu actividad, o fechas y sueldo para una liquidación) y el PDF, guardados cifrados, para generarlo y entregártelo. Se conservan 12 meses desde la compra y después se borran.\n- Pagos: identificador de Mercado Pago, importe y estado, para acreditar, conciliar y atender devoluciones. Se conservan 5 años por obligaciones fiscales.\n- Cuenta de «Mi facturación»: tu correo y tu contraseña (guardada solo como huella cifrada, nunca en texto). Mientras tengas la cuenta.\n- Comprobantes que cargás en «Mi facturación»: fecha, tipo, importe, número y nombre del cliente. El número y el cliente se guardan cifrados. Los usamos solo para mostrarte tus totales y tu categoría. Se conservan mientras tengas la cuenta y se borran cuando la eliminás.\n- Solicitudes de arrepentimiento: referencia y correo, para tramitarlas, durante 3 años.\n- Dirección IP: solo en memoria y por menos de 20 minutos, para limitar intentos y prevenir abusos.\nLo que no hacemos. No pedimos ni guardamos tu clave fiscal. Los datos de una vista previa gratuita no se guardan. Medimos visitas y compras como conteos de eventos, sin vincularlos a tu identidad. No usamos Google Analytics. Usamos cookies propias: una para mantener tu sesión y otra que guarda por 30 días desde qué sitio llegaste (por ejemplo, Instagram o Google), sin ningún dato personal. Solo si lo aceptás en el aviso de cookies, cargamos el píxel de Meta en las páginas públicas para medir nuestros anuncios: registra que visitaste el sitio, qué servicio miraste y si iniciaste un pago, junto con identificadores propios de Meta. Nunca se carga en tus pedidos, tu cuenta ni «Mi facturación», y no le enviamos tu correo ni los datos que cargás. Podés cambiar tu decisión cuando quieras desde «Cookies», al pie de cada página. No vendemos ni cedemos tus datos.\nCon quién se comparten. Con Mercado Pago, para procesar el pago. Con Resend (Estados Unidos), para enviarte correos. Con DigitalOcean (servidor en Canadá), donde funciona el servicio. Con ImprovMX (Estados Unidos), que reenvía los correos que nos escribís a soporte. Con Meta Platforms (Estados Unidos e Irlanda), solo si aceptás el píxel, que trata esos datos también según su propia política. Estos proveedores tratan los datos por nuestra cuenta y con medidas de seguridad adecuadas.\nTus derechos. Podés pedir acceso, rectificación, actualización o supresión de tus datos escribiendo a soporte@categoriaclara.com.ar, y podés borrar tu cuenta y tus comprobantes vos mismo desde «Mi facturación». El acceso es gratuito en intervalos no menores a seis meses, salvo interés legítimo (Ley 25.326, arts. 14 a 16).\nÓrgano de control. La Agencia de Acceso a la Información Pública, en su carácter de órgano de control de la Ley N° 25.326, tiene la atribución de atender las denuncias y reclamos que interpongan quienes resulten afectados en sus derechos por incumplimiento de las normas vigentes en materia de protección de datos personales.\nVersión vigente desde el 25/11/2026.",
   "products": {
     "monotributocheck": {
-      "cents": 0,
-      "version": "1.0.0",
-      "approval": "",
-      "approvedBy": ""
+      "cents": 1490000,
+      "version": "1.1.0",
+      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     },
     "liquidacion-final": {
       "cents": 990000,
-      "version": "1.0.0",
-      "approval": "",
-      "approvedBy": ""
+      "version": "1.1.0",
+      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     },
     "creditocheck": {
       "cents": 390000,
-      "version": "2.0.0",
-      "approval": "",
-      "approvedBy": ""
+      "version": "2.1.0",
+      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     },
     "alquiler-claro": {
       "cents": 290000,
-      "version": "1.0.0",
-      "approval": "",
-      "approvedBy": ""
+      "version": "1.1.0",
+      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     },
     "ganancias-claro": {
       "cents": 590000,
-      "version": "1.0.0",
-      "approval": "",
-      "approvedBy": ""
+      "version": "1.1.0",
+      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     }
   }
 }

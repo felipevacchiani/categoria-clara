@@ -52,6 +52,12 @@ const MOTIVO = {
   prueba: { label: 'Me despidieron durante el período de prueba' }
 };
 const PREAVISO = { no: { label: 'No, me despidieron sin aviso previo' }, si: { label: 'Sí, me avisaron con anticipación (trabajé el preaviso)' } };
+const VARIABLE = {
+  no: { label: 'No, cobro solo el sueldo fijo' },
+  habitual: { label: 'Sí, todos o casi todos los meses (horas extra, comisiones, premios)' },
+  ocasional: { label: 'Sí, pero solo algunos meses' }
+};
+const COBRADO = { no: { label: 'Todavía no' }, si: { label: 'Sí, ya me pagaron (quiero compararla)' } };
 const TOPE = { no: { label: 'No lo sé o mi sueldo es normal para mi convenio' }, si: { label: 'Sí, sé el tope de mi convenio' } };
 
 export const liquidacionFields = num => [
@@ -59,10 +65,15 @@ export const liquidacionFields = num => [
   { key: 'ingreso', label: 'Fecha de ingreso', type: 'date' },
   { key: 'egreso', label: 'Último día trabajado (fecha de egreso)', type: 'date' },
   { ...num('sueldo', 'Tu mejor sueldo bruto mensual del último año'), unit: 'pesos', hint: 'El bruto del recibo, sin aguinaldo ni vacaciones ni premios que no sean mensuales.' },
+  choice('variable', '¿Cobrabas horas extra, comisiones o premios además del sueldo fijo?', VARIABLE),
+  { ...num('promVariable', 'Promedio mensual de esos adicionales (últimos 6 meses)'), unit: 'pesos', show: 'variable:habitual', hint: 'Sumá lo que cobraste por horas extra, comisiones y premios en los últimos 6 meses y dividilo por 6.' },
+  { ...num('promOcasional', 'Promedio mensual de esos adicionales (últimos 6 meses)'), unit: 'pesos', show: 'variable:ocasional', hint: 'Sumá lo que cobraste por esos conceptos en los últimos 6 meses y dividilo por 6.' },
   { ...num('tomadas', 'Días de vacaciones que ya te tomaste este año'), unit: 'días', hint: 'Si no te tomaste ninguno, poné 0.' },
   { ...choice('preaviso', '¿Te avisaron del despido con anticipación?', PREAVISO), show: 'motivo:sin_causa' },
   { ...choice('tope', '¿Ganás bastante más que el promedio de tu convenio?', TOPE), show: 'motivo:sin_causa' },
-  { ...num('topeMonto', 'Tope indemnizatorio de tu convenio'), unit: 'pesos', show: 'tope:si', hint: 'Lo publica la Secretaría de Trabajo para cada convenio.' }
+  { ...num('topeMonto', 'Tope indemnizatorio de tu convenio'), unit: 'pesos', show: 'tope:si', hint: 'Lo publica la Secretaría de Trabajo para cada convenio.' },
+  choice('cobrado', '¿Ya te pagaron la liquidación final?', COBRADO),
+  { ...num('pagado', 'Total que te pagaron, en mano'), unit: 'pesos', show: 'cobrado:si', hint: 'El neto que cobraste por la liquidación final (el "total a cobrar" del recibo).' }
 ];
 
 export function evaluateLiquidacion(x) {
@@ -75,16 +86,22 @@ export function evaluateLiquidacion(x) {
   const out = new Date(tOut), y = out.getUTCFullYear(), m = out.getUTCMonth(), dia = out.getUTCDate(), dm = daysIn(y, m);
   const ant = antiguedad(x.ingreso, x.egreso);
   const S = x.sueldo;
+  // Adicionales variables: entran en días, aguinaldo, vacaciones (art. 155), preaviso e integración (art. 232).
+  // En la base del art. 245 solo si son mensuales y habituales (Ley 27.802: mejor remuneración mensual, normal y habitual).
+  const prom = x.variable === 'habitual' ? x.promVariable : x.variable === 'ocasional' ? x.promOcasional : 0;
+  if (x.variable && x.variable !== 'no' && !(prom > 0)) fail('Ingresá el promedio mensual de tus adicionales.');
+  const R = S + prom; // remuneración total mensual estimada
+  const B = x.variable === 'habitual' ? R : S; // base del art. 245
   const items = []; // [concepto, importe, remunerativo, detalle]
 
   // 1. Días trabajados del mes de egreso.
-  items.push(['Días trabajados del mes', r2(S * dia / dm), true, `${dia} de ${dm} días de ${String(m + 1).padStart(2, '0')}/${y}`]);
+  items.push(['Días trabajados del mes', r2(R * dia / dm), true, `${dia} de ${dm} días de ${String(m + 1).padStart(2, '0')}/${y}`]);
 
   // 2. Aguinaldo proporcional del semestre.
   const sem = semestre(tOut);
   const desdeSem = Math.max(sem.inicio, tIn);
   const diasSem = (tOut - desdeSem) / DAY + 1;
-  items.push(['Aguinaldo (SAC) proporcional', r2(S / 2 * diasSem / sem.dias), true, `${diasSem} de ${sem.dias} días del ${sem.nombre}`]);
+  items.push(['Aguinaldo (SAC) proporcional', r2(R / 2 * diasSem / sem.dias), true, `${diasSem} de ${sem.dias} días del ${sem.nombre}`]);
 
   // 3. Vacaciones no gozadas proporcionales (arts. 150, 155 y 156 LCT) y su SAC.
   const anual = diasVacaciones(x.ingreso, y);
@@ -92,32 +109,32 @@ export function evaluateLiquidacion(x) {
   const diasAnio = (tOut - desdeAnio) / DAY + 1;
   const largo = (Date.UTC(y + 1, 0, 1) - Date.UTC(y, 0, 1)) / DAY;
   const vacDias = Math.max(0, r2(anual * diasAnio / largo - x.tomadas));
-  const vac = r2(S / 25 * vacDias);
+  const vac = r2(R / 25 * vacDias);
   if (vac > 0) {
-    items.push(['Vacaciones no gozadas', vac, false, `${num2(vacDias)} días (${anual} por año según tu antigüedad, proporcional a ${diasAnio} días trabajados en ${y}${x.tomadas ? `, menos ${num2(x.tomadas)} ya tomados` : ''}), a sueldo / 25`]);
+    items.push(['Vacaciones no gozadas', vac, false, `${num2(vacDias)} días (${anual} por año según tu antigüedad, proporcional a ${diasAnio} días trabajados en ${y}${x.tomadas ? `, menos ${num2(x.tomadas)} ya tomados` : ''}), a ${prom ? 'sueldo más promedio de adicionales' : 'sueldo'} / 25`]);
     items.push(['SAC sobre vacaciones no gozadas', r2(vac / 12), false, 'un doceavo de las vacaciones']);
   }
 
   // 4. Despido sin causa fuera del período de prueba: preaviso, integración y antigüedad.
-  let base = S, topeAplicado = false;
+  let base = B, topeAplicado = false;
   if (sinCausa) {
     if (x.preaviso === 'no') {
       const meses = excede(x.ingreso, x.egreso, 5) ? 2 : 1; // art. 231: dos meses solo si supera 5 años
-      const pre = S * meses;
+      const pre = R * meses;
       items.push(['Indemnización sustitutiva del preaviso', pre, false, `${meses} ${meses > 1 ? 'meses' : 'mes'} de sueldo (${meses > 1 ? 'más' : 'hasta'} de 5 años de antigüedad)`]);
       items.push(['SAC sobre preaviso', r2(pre / 12), false, 'un doceavo del preaviso']);
       if (dia < dm) {
-        const integ = r2(S * (dm - dia) / dm);
+        const integ = r2(R * (dm - dia) / dm);
         items.push(['Integración del mes de despido', integ, false, `${dm - dia} días que faltaban para terminar el mes`]);
         items.push(['SAC sobre integración', r2(integ / 12), false, 'un doceavo de la integración']);
       }
     }
     if (x.tope === 'si') {
       if (!(x.topeMonto > 0)) fail('Ingresá el tope de tu convenio.');
-      if (x.topeMonto < S) { base = Math.max(x.topeMonto, S * 0.67); topeAplicado = true; }
+      if (x.topeMonto < B) { base = Math.max(x.topeMonto, B * 0.67); topeAplicado = true; }
     }
     const anios = Math.max(1, ant.anios + (ant.meses > 3 ? 1 : 0));
-    const indem = Math.max(r2(base * anios), S);
+    const indem = Math.max(r2(base * anios), B);
     items.push(['Indemnización por antigüedad (art. 245)', indem, false, `${anios} ${anios > 1 ? 'períodos' : 'período'} (años completos más fracción mayor de 3 meses) x ${money(base)}${topeAplicado ? ' (base con tope de convenio, nunca menos del 67% de tu sueldo)' : ''}`]);
   }
 
@@ -127,8 +144,16 @@ export function evaluateLiquidacion(x) {
   const neto = r2(total - aportes);
   const motivoTxt = MOTIVO[x.motivo].label.toLowerCase();
 
+  const comparar = x.cobrado === 'si';
+  if (comparar && !(x.pagado > 0)) fail('Ingresá el total que te pagaron.');
+  const dif = comparar ? r2(neto - x.pagado) : 0;
+  const margen = Math.max(1000, neto * 0.02); // diferencias menores al 2% suelen ser redondeos o descuentos de convenio
+  const veredicto = !comparar ? null : dif > margen ? 'a_favor' : dif < -margen ? 'en_contra' : 'ok';
   const lines = [
-    `Resultado: tu liquidación final estimada es de ${money(neto)} en mano (${money(total)} brutos).`,
+    !comparar ? `Resultado: tu liquidación final estimada es de ${money(neto)} en mano (${money(total)} brutos).`
+      : veredicto === 'a_favor' ? `Resultado: te habrían pagado ${money(dif)} de menos: te corresponden ${money(neto)} en mano y cobraste ${money(x.pagado)}.`
+      : veredicto === 'en_contra' ? `Resultado: cobraste ${money(-dif)} más de lo que estimamos (${money(x.pagado)} contra ${money(neto)}). Puede haber adicionales de convenio que el cálculo no incluye.`
+      : `Resultado: lo que cobraste (${money(x.pagado)}) coincide con lo que te corresponde (${money(neto)} en mano), con una diferencia menor al 2%.`,
     `Caso: ${motivoTxt}. Ingreso ${fmt(x.ingreso)}, egreso ${fmt(x.egreso)}. Antigüedad: ${ant.anios} años y ${ant.meses} meses.`,
     '--- CONCEPTO POR CONCEPTO ---',
     ...items.map(([c, v, rem, d]) => `- ${c}: ${money(v)}. ${d.charAt(0).toUpperCase() + d.slice(1)}.${rem ? '' : ' No lleva descuentos.'}`),
@@ -136,6 +161,16 @@ export function evaluateLiquidacion(x) {
     `- Descuentos de ley (17% sobre días trabajados y aguinaldo): ${money(aportes)}.`,
     `- Total a cobrar estimado: ${money(neto)}.`
   ];
+  if (prom) lines.push(`- Adicionales: se sumó tu promedio de ${money(prom)} por mes a días trabajados, aguinaldo, vacaciones, preaviso e integración${x.variable === 'habitual' ? ' y a la base de la indemnización por antigüedad, porque son habituales' : '. No se sumó a la indemnización por antigüedad porque no los cobrás todos los meses'}.`);
+  if (comparar) {
+    const grandes = [...items].sort((a, b) => b[1] - a[1]).slice(0, 3).map(i => `${i[0].toLowerCase()} (${money(i[1])})`);
+    lines.push('--- COMPARACIÓN CON LO QUE COBRASTE ---',
+      `- Te corresponde en mano: ${money(neto)}. Cobraste: ${money(x.pagado)}. Diferencia: ${dif < 0 ? '-' : ''}${money(Math.abs(dif))}.`,
+      veredicto === 'a_favor' ? `- Buscá en tu recibo estos conceptos, que son los más altos y los que más se omiten o se calculan mal: ${grandes.join(', ')}. Si alguno falta o es menor, ahí está la diferencia.`
+        : veredicto === 'en_contra' ? '- Cobrar más no es un problema: puede haber adicionales o antigüedad de convenio, o un acuerdo con la empresa. Si tenés dudas, compará concepto por concepto.'
+        : '- No hay diferencias relevantes. Igual verificá que el recibo detalle cada concepto y que te entreguen el certificado de trabajo.',
+      ...(veredicto === 'a_favor' ? ['- Aunque hayas firmado el recibo sin reservas, un pago insuficiente se toma como pago a cuenta (art. 260 LCT): podés reclamar la diferencia dentro de los 2 años (art. 256 LCT).'] : []));
+  }
 
   lines.push('--- LO QUE TENÉS QUE SABER ---');
   if (sinCausa && ant.total < 6) lines.push('- Atención: con menos de 6 meses de antigüedad probablemente estabas en período de prueba (6 meses en general, más largo en algunas empresas o convenios). En ese caso no corresponden indemnización, preaviso ni integración: recalculá eligiendo "durante el período de prueba".');
@@ -157,16 +192,20 @@ export function evaluateLiquidacion(x) {
     '2. Si falta algún concepto o un importe no coincide, firmá agregando "en disconformidad" o "a cuenta de mayor cantidad": así no renunciás a reclamar la diferencia.',
     '3. Exigí el certificado de trabajo y la constancia de aportes (art. 80 LCT) y, si te despidieron, la documentación para el seguro de desempleo de ANSES.',
     '4. Si no te pagan en 4 días hábiles o hay diferencias, podés reclamar gratis en el servicio de conciliación laboral de tu provincia o en la Secretaría de Trabajo.',
-    `Informe estimativo basado en los datos que ingresaste y en la ${NORMAS.id}. No incluye horas extra, comisiones variables, adicionales de convenio ni multas, y no reemplaza la revisión de un abogado laboralista o un contador.`
+    `Informe estimativo basado en los datos que ingresaste y en la ${NORMAS.id}. ${prom ? 'Los adicionales se toman por su promedio: si tu mejor mes fue más alto, el aguinaldo puede ser mayor. ' : ''}No incluye adicionales propios de tu convenio ni multas, y no reemplaza la revisión de un abogado laboralista o un contador.`
   );
   return lines;
 }
 
 export function liquidacionTeaser(lines) {
-  const conceptos = lines.filter(l => l.startsWith('- ') && /: \$/.test(l) && !/^- (Total|Descuentos)/.test(l));
+  const conceptos = lines.slice(0, lines.findIndex(l => l.startsWith('- Total bruto'))).filter(l => l.startsWith('- ') && /: \$/.test(l));
   return {
-    facts: [['Conceptos que te corresponden', String(conceptos.length)], ['Plazo de pago', '4 días hábiles desde el egreso']],
-    includes: ['El total a cobrar en mano y el bruto', 'Cada concepto con su importe y cómo se calcula', 'Los cambios de la reforma laboral 2026 aplicados a tu caso', 'Qué hacer antes de firmar el recibo y cómo reclamar si no te pagan']
+    facts: [['Conceptos que te corresponden', String(conceptos.length)],
+      ...(/^Resultado: te habrían pagado/.test(lines[0]) ? [['Comparación con lo que cobraste', 'Hay una diferencia a tu favor']]
+        : /^Resultado: cobraste/.test(lines[0]) ? [['Comparación con lo que cobraste', 'Cobraste más de lo estimado']]
+        : /^Resultado: lo que cobraste/.test(lines[0]) ? [['Comparación con lo que cobraste', 'Coincide con lo que te corresponde']] : []),
+      ['Plazo de pago', '4 días hábiles desde el egreso']],
+    includes: [/^Resultado: te habrían pagado/.test(lines[0]) ? 'Cuánta plata te deben y en qué conceptos buscarla' : 'El total a cobrar en mano y el bruto', 'Cada concepto con su importe y cómo se calcula', 'Los cambios de la reforma laboral 2026 aplicados a tu caso', 'Qué hacer antes de firmar el recibo y cómo reclamar si no te pagan']
   };
 }
 

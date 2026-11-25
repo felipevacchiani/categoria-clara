@@ -140,7 +140,7 @@ for (const box of document.querySelectorAll('[data-sum-into]')) {
   if (!publicPage) return;
   const load = () => {
     const q = window.fbq = function () { q.callMethod ? q.callMethod.apply(q, arguments) : q.queue.push(arguments); };
-    q.push = q; q.loaded = true; q.version = '2.0'; q.queue = [];
+    window._fbq = q; q.push = q; q.loaded = true; q.version = '2.0'; q.queue = [];
     const s = document.createElement('script'); s.async = true; s.src = 'https://connect.facebook.net/en_US/fbevents.js';
     document.head.appendChild(s);
     fbq('set', 'autoConfig', false, PIXEL);

@@ -1,5 +1,6 @@
 import {TABLE as MONO_TABLE,RECATEGORIZACION} from './monotributo.js';
 import {createServer} from 'node:http';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {createHash,randomBytes,randomUUID,scrypt,timingSafeEqual,createCipheriv,createDecipheriv} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {dirname,join} from 'node:path';
@@ -54,7 +55,22 @@ const price=s=>{
 // Un servicio pago sin precio habilitado (credenciales o aprobación faltantes) no se muestra: nunca se entrega gratis.
 const isReclamo=s=>['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(s?.slug);
 const shown=()=>catalog.filter(s=>!s.sellable||price(s));
-const event=(kind,slug,id=randomUUID(),source=null)=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source) VALUES (?,?,?,?,?)',id,kind,slug,time(),source);
+// Canal de llegada (primer contacto): utm_source o el sitio de origen. Cookie propia de 30 días, sin datos personales.
+const reqStore=new AsyncLocalStorage();
+const channelNow=()=>reqStore.getStore()?.channel||'directo';
+const CHANNELS=[[/(^|\.)google\./,'google'],[/(^|\.)bing\.com$/,'bing'],[/instagram\.com$/,'instagram'],[/(facebook\.com|fb\.com|fb\.me)$/,'facebook'],[/(chatgpt\.com|openai\.com)$/,'chatgpt'],[/duckduckgo\.com$/,'duckduckgo'],[/(t\.co|twitter\.com|x\.com)$/,'x'],[/linkedin\.com$/,'linkedin'],[/(wa\.me|whatsapp\.com)$/,'whatsapp']];
+function channelFor(req,url){
+  const cookie=(req.headers.cookie||'').match(/(?:^|;\s*)cc_src=([a-z0-9_-]{1,30})/)?.[1];
+  const utm=(url.searchParams.get('utm_source')||'').toLowerCase().replace(/[^a-z0-9_-]/g,'').slice(0,30);
+  if(utm) return {channel:utm,set:utm!==cookie};
+  if(cookie) return {channel:cookie,set:false};
+  let host='';try{host=new URL(req.headers.referer||'').host.toLowerCase();}catch{}
+  if(!host||host===new URL(origin).host) return {channel:'directo',set:false};
+  const hit=CHANNELS.find(([re])=>re.test(host));
+  const ch=hit?hit[1]:host.replace(/^www\./,'').split('.').slice(0,-1).join('-').replace(/[^a-z0-9_-]/g,'').slice(0,30)||'otro';
+  return {channel:ch,set:true};
+}
+const event=(kind,slug,id=randomUUID(),source=null,channel=channelNow())=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source,channel) VALUES (?,?,?,?,?,?)',id,kind,slug,time(),source,channel||'directo');
 const sourceOf=value=>value==='ficha'||cases.some(c=>c.path===value)?value:'ficha';
 function seal(value) {
   if(!key) return Buffer.concat([Buffer.from('0'),Buffer.from(value)]);
@@ -193,8 +209,8 @@ function acceptPayment(payment, order) {
       sql('INSERT INTO reports VALUES (?,?,?)',order.id,seal(report),time());
       sql("UPDATE orders SET state='ready', approved_payment=? WHERE id=?",paymentId,order.id);
       sql('INSERT INTO deliveries(order_id) VALUES (?)',order.id);
-      event('purchase',order.slug,'purchase:'+order.id,order.source);
-      event('report_delivered',order.slug,'report:'+order.id,order.source);
+      event('purchase',order.slug,'purchase:'+order.id,order.source,order.channel);
+      event('report_delivered',order.slug,'report:'+order.id,order.source,order.channel);
     }
     const next=payment.status==='refunded'?'refunded':
       partial||['charged_back','in_mediation'].includes(payment.status)?'disputed':null;
@@ -321,7 +337,7 @@ async function startCheckout(order,secret) {
     if(destination.protocol!=='https:'||!['www.mercadopago.com.ar','sandbox.mercadopago.com.ar','www.mercadopago.com','sandbox.mercadopago.com'].includes(destination.hostname)) throw Error('Destino inválido');
     atomic(db,()=>{
       sql('UPDATE orders SET preference=? WHERE id=?',destination.href,order.id);
-      event('begin_checkout',order.slug,'checkout:'+order.id,order.source);
+      event('begin_checkout',order.slug,'checkout:'+order.id,order.source,order.channel);
     });
     return destination.href;
   } catch(error) {
@@ -646,7 +662,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
         const id=randomUUID();
         const secret=randomBytes(32).toString('hex');
         const document={title:'Categoría Clara · '+s.name,lines:resultLines(s,result.lines,id)};
-        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,cents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen);
+        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source,channel) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,cents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen,channelNow());
         try {return redirect(res,await startCheckout(one('SELECT * FROM orders WHERE id=?',id),secret));}
         catch {return redirect(res,'/p/'+secret);}
       }
@@ -782,6 +798,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
       <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No')]))}
       <h2>Preferencias pendientes de verificar</h2>${table(['Pedido','Servicio','Intento'],review.map(r=>[esc(r.id),esc(r.slug),esc(r.created)]))}
       <h2>Pagos adicionales para conciliar</h2>${table(['Pedido','ID en Mercado Pago','Estado'],duplicates.map(r=>[esc(r.order_id),esc(r.id),esc(r.status)]))}
+      <h2>Ventas por canal de llegada</h2>${table(['Canal','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],all(`SELECT COALESCE(channel,'directo') channel,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events GROUP BY 1 ORDER BY purchases DESC,views DESC`).map(r=>[esc(r.channel),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
       <h2>Embudo por servicio y página de entrada</h2>${table(['Servicio','Entrada','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Visita → compra','Vista previa → compra'],funnel.map(r=>[esc(r.slug),esc(r.source==='ficha'?'Ficha del servicio':(c=>c?caseUrl(c):r.source)(cases.find(x=>x.path===r.source))),r.views,r.starts,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views),rate(r.purchases,r.previews)]))}
       <p class="muted small">Conteos de eventos: una persona puede generar varias visitas o vistas previas.</p>
       <h2>Eventos de conversión</h2>${table(['Servicio','Evento','Cantidad'],metrics.map(r=>[esc(r.slug),esc(r.kind),r.quantity]))}
@@ -842,7 +859,9 @@ if(process.argv[2]==='admin'){
     res.setHeader('Referrer-Policy','same-origin');
     res.setHeader('Content-Security-Policy',"default-src 'none'; connect-src 'self'; style-src 'self'; script-src 'self'; form-action 'self' https://*.mercadopago.com.ar https://*.mercadopago.com; base-uri 'none'; frame-ancestors 'none'");
     if(secure) res.setHeader('Strict-Transport-Security','max-age=31536000');
-    route(req,res).catch(error=>{
+    let ch={channel:'directo',set:false};
+    try{ if(req.method==='GET'){ch=channelFor(req,new URL(req.url,origin)); if(ch.set) res.setHeader('Set-Cookie',`cc_src=${ch.channel}; Path=/; Max-Age=2592000; SameSite=Lax${secure?'; Secure':''}; HttpOnly`);} else { const c=(req.headers.cookie||'').match(/(?:^|;\s*)cc_src=([a-z0-9_-]{1,30})/)?.[1]; if(c) ch={channel:c,set:false}; } }catch{}
+    reqStore.run({channel:ch.channel},()=>route(req,res)).catch(error=>{
       if(res.headersSent){res.destroy();return;}
       if(!error.status) console.error('Error interno:',error.code||error.name);
       if(req.url.startsWith('/api/')){res.writeHead(error.status||500,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});return res.end(JSON.stringify({error:error.status?error.message:'No se pudo procesar la solicitud.'}));}

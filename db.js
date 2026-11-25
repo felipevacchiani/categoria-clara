@@ -32,6 +32,8 @@ export function openDatabase(path) {
   if(!columns.includes('source')) db.exec('ALTER TABLE orders ADD COLUMN source TEXT');
   const eventColumns=db.prepare('PRAGMA table_info(events)').all().map(column=>column.name);
   if(!eventColumns.includes('source')) db.exec('ALTER TABLE events ADD COLUMN source TEXT');
+  if(!eventColumns.includes('channel')) db.exec('ALTER TABLE events ADD COLUMN channel TEXT');
+  if(!columns.includes('channel')) db.exec('ALTER TABLE orders ADD COLUMN channel TEXT');
   atomic(db,()=>{
     for(const table of ['orders','events']){
       const update=db.prepare(`UPDATE ${table} SET slug=? WHERE slug=?`);

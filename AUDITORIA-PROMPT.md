@@ -86,6 +86,20 @@ Reportá cada diferencia con: caso, resultado del sistema, resultado correcto, f
 ### E. Código y operación
 - Calidad, duplicación, casos sin test, dependencias del entorno, manejo de errores, backups, despliegue automático y reversión.
 
+### F. Auditoría de producto: ¿cada servicio está bien y se puede vender?
+Para **cada servicio** del catálogo (`services.js`, precios en `release.borrador.json`, textos en `marketing.js`), probalo como lo usaría un cliente real, primero en la vista previa gratis y después con el informe pago en local. Respondé:
+1. **¿El cálculo está bien?** Resumí lo que encontraste en la sección A: correcto, correcto con salvedades o con errores. Si un cliente lo usara hoy para tomar una decisión, ¿podría salir perjudicado?
+2. **¿Qué cambiarías?** Datos que se piden de más o de menos, supuestos ocultos, resultados confusos, avisos legales que faltan, lo que falta en el PDF para que valga lo que cuesta. Ordená los cambios por impacto.
+3. **¿Es vendible?**
+   - ¿Qué problema concreto resuelve y para quién? ¿Ese cliente lo pagaría?
+   - Alternativas gratis (simuladores de ARCA, del BCRA, de bancos, de diarios, calculadoras de estudios contables): ¿qué da el informe pago que esas no dan? Si la respuesta es "nada", decilo.
+   - Precio: ¿está bien, caro o barato frente a lo que da y a un contador? Proponé un precio y explicá por qué.
+   - ¿La vista previa gratis muestra demasiado (nadie paga) o muy poco (nadie confía)?
+   - ¿Hay riesgo legal o de reputación por vender ese cálculo (ejercicio profesional, responsabilidad si el número está mal)?
+4. **Veredicto por servicio:** Mantener, Mejorar antes de seguir vendiendo, Rediseñar o Sacar, con 2 líneas de justificación.
+
+Cerrá con una opinión del catálogo completo: qué servicio tiene más potencial, cuál sobra, qué servicio nuevo agregarías (y por qué alguien lo pagaría) y si conviene vender sueltos, en combos o por suscripción.
+
 ## 5. Entregable
 
 Un informe en Markdown con:
@@ -93,6 +107,7 @@ Un informe en Markdown con:
 2. **Tabla de hallazgos**: ID · Área · Gravedad (Crítica/Alta/Media/Baja) · Descripción · Cómo reproducir · Impacto · Arreglo propuesto.
 3. **Tabla de casos de cálculo** con resultado esperado vs. obtenido.
 4. **Parches** (`diff`) para todo lo Crítico y Alto, con tests nuevos que fallen antes y pasen después.
-5. **Lista de cosas que no pudiste probar** y qué te faltó.
+5. **Tabla de producto** (sección F): Servicio · Precio actual · ¿Cálculo OK? · Cambios principales · ¿Vendible? · Precio sugerido · Veredicto.
+6. **Lista de cosas que no pudiste probar** y qué te faltó.
 
-Sé exigente: priorizá lo que puede hacer que un cliente reciba un número equivocado o que se filtren datos.
+Sé exigente: priorizá lo que puede hacer que un cliente reciba un número equivocado o que se filtren datos. En la parte de producto no me cuides: si un servicio no se vende, decilo.

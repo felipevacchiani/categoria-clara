@@ -25,7 +25,7 @@ export const parseAmount = raw => {
   else if (/^\d{1,3}(\.\d{3})+$/.test(v)) v = v.replace(/\./g, '');
   return v;
 };
-const amount = value => {
+export const amount = value => {
   const v = parseAmount(value);
   check(/^\d{1,12}(\.\d{1,2})?$/.test(v), 'Usá números positivos o cero. Ejemplo: 1.250.000,50');
   return Math.round(Number(v)*100);

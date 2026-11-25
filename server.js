@@ -7,7 +7,7 @@ import {dirname,join} from 'node:path';
 import {promisify} from 'node:util';
 import {openDatabase,atomic} from './db.js';
 import {startIndices} from './indices.js';
-import {services,listed as catalog,getService,evaluate} from './services.js';
+import {services,listed as catalog,getService,evaluate,amount} from './services.js';
 import {pitch,cases,site} from './marketing.js';
 import {CONSUMO,ENVIO,VUELO} from './reclamos.js';
 import {matchesPayment,mp,validSignature} from './payments.js';
@@ -47,13 +47,24 @@ const pathFor=s=>'/servicios/'+s.slug;
 const policy=release.policyVersion||'local-v1';
 const failures=new Map();
 const statuses={pending:'Pendiente de pago',ready:'Informe disponible',refunded:'Devuelto',disputed:'Pago en revisión'};
+// Precio de lista: el de release.json, salvo que el administrador lo haya cambiado desde el panel.
+// La aprobación del motor (versión) sigue saliendo de release.json: el panel cambia el precio, no habilita servicios.
+const validCents=c=>Number.isSafeInteger(c)&&c>=100&&c<=100000000;
 const price=s=>{
   const entry=release.products?.[s.slug];
   if(!s.sellable||!token||!env.MP_COLLECTOR_ID||!env.MP_WEBHOOK_SECRET||!secure||!key) return 0;
-  if(!Number.isSafeInteger(entry?.cents)||entry.cents<100||entry.cents>100000000) return 0;
+  if(!validCents(entry?.cents)) return 0;
   if(live&&(entry.version!==s.version||!entry.approval||!entry.approvedBy)) return 0;
-  return entry.cents;
+  const override=db.prepare('SELECT cents FROM price_overrides WHERE slug=?').get(s.slug)?.cents;
+  return validCents(override)?override:entry.cents;
 };
+// Cupón válido para un servicio: activo, sin vencer y con usos disponibles. Devuelve el registro o null.
+const couponFor=(code,slug)=>{
+  const c=db.prepare('SELECT * FROM coupons WHERE code=?').get(String(code||'').trim().toUpperCase());
+  if(!c||!c.active||(c.slug&&c.slug!==slug)||(c.expires&&c.expires<new Date().toISOString().slice(0,10))||(c.max_uses!=null&&c.used>=c.max_uses)) return null;
+  return c;
+};
+const discounted=(cents,c)=>Math.max(100,Math.round(cents*(100-c.pct)/100));
 // Un servicio pago sin precio habilitado (credenciales o aprobación faltantes) no se muestra: nunca se entrega gratis.
 const isReclamo=s=>['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(s?.slug);
 const shown=()=>catalog.filter(s=>!s.sellable||price(s));
@@ -213,6 +224,7 @@ function acceptPayment(payment, order) {
       sql("UPDATE orders SET state='ready', approved_payment=? WHERE id=?",paymentId,order.id);
       sql('INSERT INTO deliveries(order_id) VALUES (?)',order.id);
       event('purchase',order.slug,'purchase:'+order.id,order.source,order.channel);
+      if(current.coupon) sql('UPDATE coupons SET used=used+1 WHERE code=?',current.coupon);
       event('report_delivered',order.slug,'report:'+order.id,order.source,order.channel);
     }
     const next=payment.status==='refunded'?'refunded':
@@ -662,18 +674,22 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
         if(!validEmail(email)) fail(422,'Revisá el correo.');
         if(email!==String(values.email2||'').trim().toLowerCase()) fail(422,'Los dos correos no coinciden.');
         if(email===adminEmail) fail(409,'Usá otro correo para comprar.');
+        const code=String(values.cupon||'').trim();
+        const coupon=code?couponFor(code,s.slug):null;
+        if(code&&!coupon) fail(422,'El cupón no es válido, venció o no aplica a este servicio.');
+        const finalCents=coupon?discounted(cents,coupon):cents;
         const account=customer(email);
         const id=randomUUID();
         const secret=randomBytes(32).toString('hex');
         const document={title:'Categoría Clara · '+s.name,lines:resultLines(s,result.lines,id)};
-        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source,channel) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,cents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen,channelNow());
+        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source,channel,coupon,list_cents) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,finalCents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen,channelNow(),coupon?.code||null,cents);
         try {return redirect(res,await startCheckout(one('SELECT * FROM orders WHERE id=?',id),secret));}
         catch {return redirect(res,'/p/'+secret);}
       }
       if(!cents) return show(info.title,`<a href="${path}">Volver al formulario</a><h1>${esc(info.title)}</h1><section class="panel result">${renderLines(result.lines)}</section>${info.next&&shown().some(x=>pathFor(x)===info.next[2])?`<section class="panel note-box"><h2>${esc(info.next[0])}</h2><p>${esc(info.next[1])}</p><a class="button" href="${esc(info.next[2])}">${esc(info.next[3])}</a></section>`:''}`);
       const preview=s.teaser?s.teaser(result.lines):(()=>{const f=summary(result.lines);return {facts:[['Para',f.para],['Asunto','Reclamo por '+f.asunto.replace(/^Reclamo por /,'')],['Respuesta hasta',f.limite]],includes:['Nota formal lista para firmar y enviar',`${f.normas} referencias normativas para tu caso`,`${f.pruebas} pruebas para adjuntar`,`${f.pasos} próximos pasos, incluido a qué organismo escalarlo`,...(f.avisos?['Aviso sobre plazos importantes de tu caso']:[])]};})();
       const hidden=s.fields.map(f=>`<input type="hidden" name="${f.key}" value="${esc(values[f.key])}">`).join('')+`<input type="hidden" name="origen" value="${esc(origen)}">`;
-      const buy=post(path,hidden+`<label>Tu correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Repetí tu correo<input name="email2" type="email" autocomplete="email" maxlength="254" required></label>${release.withdrawalNotice?`<p class="muted small">${esc(release.withdrawalNotice)}</p>`:''}<label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button name="action" value="order">Pagar y descargar</button>`).replace('<form ',`<form data-price="${cents/100}" `);
+      const buy=post(path,hidden+`<label>Tu correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Repetí tu correo<input name="email2" type="email" autocomplete="email" maxlength="254" required></label>${one('SELECT 1 FROM coupons WHERE active=1 LIMIT 1')?'<label>Cupón de descuento (opcional)<input name="cupon" maxlength="30" autocomplete="off" autocapitalize="characters"></label>':''}${release.withdrawalNotice?`<p class="muted small">${esc(release.withdrawalNotice)}</p>`:''}<label class="consent"><input type="checkbox" name="consent" value="${esc(policy)}" required> Acepto los <a href="/terminos">términos</a> y leí el <a href="/privacidad">aviso de privacidad</a>.</label><button name="action" value="order">Pagar y descargar</button>`).replace('<form ',`<form data-price="${cents/100}" `);
       return show(info.title,`<a href="${path}">Editar los datos</a><h1>${!isReclamo(s)?'Tu resultado':'Tu reclamo está listo'}</h1><div class="svc-grid"><section class="panel"><h2>Vista previa</h2><dl class="facts">${preview.facts.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
         <h3>${!isReclamo(s)?'El informe completo incluye':'El PDF completo incluye'}</h3>${checks(preview.includes)}
         <div class="locked" aria-hidden="true"><i></i><i></i><i class="short"></i><i></i><i class="short"></i></div></section>
@@ -793,21 +809,77 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     if(!admin(user)) return show('Administración',`<h1>Administración</h1><section class="panel">${post('/admin/ingresar',authFields+button('Ingresar'))}</section>`,{status:403});
     const rows=all('SELECT o.*,u.email,d.state delivery FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN deliveries d ON d.order_id=o.id ORDER BY o.created DESC LIMIT 200');
     const metrics=all('SELECT slug,kind,COUNT(*) quantity FROM events GROUP BY slug,kind');
-    const funnel=all(`SELECT slug,COALESCE(source,'ficha') source,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE kind IN ('view_item','start_form','preview','begin_checkout','purchase') GROUP BY slug,COALESCE(source,'ficha') ORDER BY purchases DESC, views DESC`);
+    // Período del embudo: últimos 7 o 30 días, o todo (?periodo=7|30|todo). Por defecto 7 días: las campañas empezaron el 24/11/2026.
+    const periodo=['7','30','todo'].includes(url.searchParams.get('periodo'))?url.searchParams.get('periodo'):'7';
+    const since=periodo==='todo'?'0000':new Date(Date.now()-Number(periodo)*86400000).toISOString();
+    const funnel=all(`SELECT slug,COALESCE(source,'ficha') source,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE kind IN ('view_item','start_form','preview','begin_checkout','purchase') AND created>=? GROUP BY slug,COALESCE(source,'ficha') ORDER BY purchases DESC, views DESC`,since);
+    const bySlug=all(`SELECT slug,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE created>=? GROUP BY slug ORDER BY purchases DESC,views DESC`,since);
+    const byChannel=all(`SELECT COALESCE(channel,'directo') channel,slug,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE created>=? GROUP BY 1,2 HAVING views>0 OR purchases>0 ORDER BY purchases DESC,views DESC`,since);
+    const revenue=all(`SELECT o.slug,COALESCE(o.channel,'directo') channel,COUNT(*) n,SUM(o.cents) cents FROM orders o WHERE o.approved_payment IS NOT NULL AND o.state IN ('ready','disputed') AND o.mode=? AND o.created>=? GROUP BY 1,2 ORDER BY cents DESC`,mode,since);
+    const drop=(a,b)=>a?Math.round((a-b)*1000/a)/10+'%':'—';
+    const prices=catalog.filter(x=>x.sellable).map(x=>({s:x,base:release.products?.[x.slug]?.cents,override:one('SELECT * FROM price_overrides WHERE slug=?',x.slug)}));
+    const coupons=all('SELECT * FROM coupons ORDER BY created DESC LIMIT 100');
+    const log=all('SELECT l.*,u.email FROM admin_log l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.created DESC LIMIT 30');
+    const slugOptions='<option value="">Todos los servicios</option>'+catalog.filter(x=>x.sellable).map(x=>`<option value="${esc(x.slug)}">${esc(x.name)}</option>`).join('');
     const rate=(a,b)=>b?Math.round(a*1000/b)/10+'%':'—';
     const sales=all("SELECT state,mode,COUNT(*) quantity,SUM(cents) cents FROM orders WHERE approved_payment IS NOT NULL GROUP BY state,mode");
     const review=all("SELECT o.id,o.slug,a.created FROM orders o JOIN checkout_attempts a ON a.order_id=o.id WHERE o.preference IS NULL AND o.state='pending' ORDER BY a.created DESC LIMIT 100");
     const duplicates=all("SELECT p.order_id,p.id,p.status FROM payments p JOIN orders o ON o.id=p.order_id WHERE o.approved_payment IS NOT NULL AND o.approved_payment!=p.id AND p.status IN ('approved','in_mediation','charged_back') LIMIT 100");
     const requests=all('SELECT w.*,o.accessed_at FROM withdrawals w LEFT JOIN orders o ON o.id=w.reference ORDER BY w.created DESC LIMIT 100');
-    return show('Administración',`<h1>Administración</h1><h2>Importes de pedidos con pago aprobado</h2>${table(['Ambiente','Estado','Pedidos','Importe bruto'],sales.map(r=>[esc(r.mode),esc(statuses[r.state]),r.quantity,ars(r.cents)]))}
-      <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No')]))}
+    const periodNav=`<p class="muted small">Período: ${[['7','7 días'],['30','30 días'],['todo','Todo']].map(([v,l])=>v===periodo?`<b>${l}</b>`:`<a href="/admin?periodo=${v}">${l}</a>`).join(' · ')}</p>`;
+    return show('Administración',`<h1>Administración</h1>
+      <h2>Embudo por servicio</h2>${periodNav}${table(['Servicio','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Abandono visita → formulario','Abandono formulario → vista previa','Abandono vista previa → pago','Abandono pago → compra','Visita → compra'],bySlug.map(r=>[esc(r.slug),r.views,r.starts,r.previews,r.checkouts,r.purchases,drop(r.views,r.starts),drop(r.starts,r.previews),drop(r.previews,r.checkouts),drop(r.checkouts,r.purchases),rate(r.purchases,r.views)]))}
+      <h2>Canal y servicio</h2>${table(['Canal','Servicio','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],byChannel.map(r=>[esc(r.channel),esc(r.slug),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
+      <h2>Ingresos por servicio y canal (${live?'producción':'prueba'})</h2>${table(['Servicio','Canal','Ventas','Ingresos'],revenue.map(r=>[esc(r.slug),esc(r.channel),r.n,ars(r.cents)]))}
+      <p class="muted small">Para el costo por venta, dividí el gasto del período en Google Ads o Meta por las compras de ese canal.</p>
+      <h2>Precios</h2>${table(['Servicio','Precio base (release)','Precio vigente','Cambiar precio'],prices.map(({s:x,base,override})=>[esc(x.name),validCents(base)?ars(base):'—',price(x)?ars(price(x))+(override?` <span class="muted small">(panel, ${esc(override.updated.slice(0,10))})</span>`:''):'No a la venta',post('/admin/precio',`<input type="hidden" name="slug" value="${esc(x.slug)}"><label class="sr-only" for="p-${esc(x.slug)}">Nuevo precio</label><input id="p-${esc(x.slug)}" name="precio" inputmode="decimal" placeholder="Ej. 7.900" maxlength="12" size="9">${button('Guardar')}${override?' <button name="reset" value="1" class="ghost">Volver al base</button>':''}`)]))}
+      <h2>Cupones</h2>${table(['Código','Descuento','Servicio','Usos','Vence','Estado','Acción'],coupons.map(c=>[esc(c.code),c.pct+'%',esc(c.slug?getService(c.slug)?.name||c.slug:'Todos'),c.used+(c.max_uses!=null?' / '+c.max_uses:''),esc(c.expires||'—'),c.active?'Activo':'Pausado',post('/admin/cupon/estado',`<input type="hidden" name="code" value="${esc(c.code)}">`+button(c.active?'Pausar':'Activar'))]))}
+      ${post('/admin/cupon',`<fieldset><legend>Nuevo cupón</legend><label>Código<input name="code" required maxlength="30" pattern="[A-Za-z0-9_-]{3,30}" autocapitalize="characters"></label><label>Descuento (%)<input name="pct" type="number" min="1" max="90" required></label><label>Servicio<select name="slug">${slugOptions}</select></label><label>Usos máximos (vacío = sin límite)<input name="max" type="number" min="1"></label><label>Vence (opcional)<input name="expires" type="date"></label>${button('Crear cupón')}</fieldset>`)}
+      <h2>Cambios en el panel</h2>${table(['Fecha','Usuario','Acción','Detalle'],log.map(l=>[esc(l.created.slice(0,16).replace('T',' ')),esc(l.email||'—'),esc(l.action),esc(l.detail)]))}
+      <h2>Importes de pedidos con pago aprobado</h2>${table(['Ambiente','Estado','Pedidos','Importe bruto'],sales.map(r=>[esc(r.mode),esc(statuses[r.state]),r.quantity,ars(r.cents)]))}
+      <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents)+(o.coupon?` <span class="muted small">(${esc(o.coupon)})</span>`:''),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No')]))}
       <h2>Preferencias pendientes de verificar</h2>${table(['Pedido','Servicio','Intento'],review.map(r=>[esc(r.id),esc(r.slug),esc(r.created)]))}
       <h2>Pagos adicionales para conciliar</h2>${table(['Pedido','ID en Mercado Pago','Estado'],duplicates.map(r=>[esc(r.order_id),esc(r.id),esc(r.status)]))}
       <h2>Ventas por canal de llegada</h2>${table(['Canal','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],all(`SELECT COALESCE(channel,'directo') channel,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events GROUP BY 1 ORDER BY purchases DESC,views DESC`).map(r=>[esc(r.channel),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
-      <h2>Embudo por servicio y página de entrada</h2>${table(['Servicio','Entrada','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Visita → compra','Vista previa → compra'],funnel.map(r=>[esc(r.slug),esc(r.source==='ficha'?'Ficha del servicio':(c=>c?caseUrl(c):r.source)(cases.find(x=>x.path===r.source))),r.views,r.starts,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views),rate(r.purchases,r.previews)]))}
+      <h2>Embudo por servicio y página de entrada</h2>${periodNav}${table(['Servicio','Entrada','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Visita → compra','Vista previa → compra'],funnel.map(r=>[esc(r.slug),esc(r.source==='ficha'?'Ficha del servicio':(c=>c?caseUrl(c):r.source)(cases.find(x=>x.path===r.source))),r.views,r.starts,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views),rate(r.purchases,r.previews)]))}
       <p class="muted small">Conteos de eventos: una persona puede generar varias visitas o vistas previas.</p>
       <h2>Eventos de conversión</h2>${table(['Servicio','Evento','Cantidad'],metrics.map(r=>[esc(r.slug),esc(r.kind),r.quantity]))}
       <h2>Solicitudes de arrepentimiento</h2>${table(['Código','Pedido','Correo','Contenido entregado','Estado','Acción'],requests.map(r=>[esc(r.id),esc(r.reference),esc(r.email),esc(r.accessed_at?.slice(0,16).replace('T',' ')||'No'),esc(r.status),r.status==='received'?post('/admin/arrepentimiento',`<input type="hidden" name="id" value="${esc(r.id)}">`+button('Marcar atendida')):'—']))}`);
+  }
+  if(method==='POST'&&['/admin/precio','/admin/cupon','/admin/cupon/estado'].includes(path)){
+    if(!admin(user)) fail(403,'Área restringida.');
+    const v=await form(req);
+    const audit=(action,detail)=>sql('INSERT INTO admin_log VALUES (?,?,?,?,?)',randomUUID(),user.id,action,detail,time());
+    if(path==='/admin/precio'){
+      const x=catalog.find(c=>c.sellable&&c.slug===v.slug);
+      if(!x) fail(422,'Servicio inválido.');
+      if(v.reset){sql('DELETE FROM price_overrides WHERE slug=?',x.slug);audit('precio',`${x.slug}: vuelve al precio base`);}
+      else{
+        let c;try{c=amount(String(v.precio||''));}catch{c=NaN;}
+        if(!validCents(c)) fail(422,'Ingresá un precio entre $1 y $1.000.000.');
+        sql('INSERT INTO price_overrides VALUES (?,?,?,?) ON CONFLICT(slug) DO UPDATE SET cents=excluded.cents,updated=excluded.updated,by=excluded.by',x.slug,c,time(),user.id);
+        audit('precio',`${x.slug}: ${ars(c)}`);
+      }
+    }
+    if(path==='/admin/cupon'){
+      const code=String(v.code||'').trim().toUpperCase();
+      const pct=Number(v.pct), max=v.max?Number(v.max):null;
+      if(!/^[A-Z0-9_-]{3,30}$/.test(code)) fail(422,'El código lleva de 3 a 30 letras, números, guiones o guiones bajos.');
+      if(!Number.isInteger(pct)||pct<1||pct>90) fail(422,'El descuento va de 1% a 90%.');
+      if(max!=null&&!(Number.isInteger(max)&&max>=1)) fail(422,'Revisá los usos máximos.');
+      if(v.slug&&!catalog.some(c=>c.sellable&&c.slug===v.slug)) fail(422,'Servicio inválido.');
+      if(v.expires&&!/^\d{4}-\d{2}-\d{2}$/.test(v.expires)) fail(422,'Revisá la fecha de vencimiento.');
+      if(one('SELECT 1 FROM coupons WHERE code=?',code)) fail(409,'Ya existe un cupón con ese código.');
+      sql('INSERT INTO coupons(code,pct,slug,max_uses,expires,created) VALUES (?,?,?,?,?,?)',code,pct,v.slug||null,max,v.expires||null,time());
+      audit('cupón',`${code}: ${pct}%${v.slug?' en '+v.slug:''}${max?`, ${max} usos`:''}${v.expires?', vence '+v.expires:''}`);
+    }
+    if(path==='/admin/cupon/estado'){
+      const c=one('SELECT * FROM coupons WHERE code=?',String(v.code||''));
+      if(!c) fail(404,'Cupón inexistente.');
+      sql('UPDATE coupons SET active=? WHERE code=?',c.active?0:1,c.code);
+      audit('cupón',`${c.code}: ${c.active?'pausado':'activado'}`);
+    }
+    return redirect(res,'/admin');
   }
   if(method==='POST'&&path==='/admin/arrepentimiento'){
     if(!admin(user)) fail(403,'Área restringida.');

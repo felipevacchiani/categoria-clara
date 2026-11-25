@@ -22,6 +22,9 @@ export function openDatabase(path) {
   CREATE UNIQUE INDEX IF NOT EXISTS invoices_dedupe ON invoices(user_id,dedupe);
   CREATE TABLE IF NOT EXISTS account_tokens(digest TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),purpose TEXT NOT NULL,expires INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS withdrawals(id TEXT PRIMARY KEY,reference TEXT NOT NULL,email TEXT NOT NULL,status TEXT NOT NULL,created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS price_overrides(slug TEXT PRIMARY KEY,cents INTEGER NOT NULL,updated TEXT NOT NULL,by TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS coupons(code TEXT PRIMARY KEY,pct INTEGER NOT NULL,slug TEXT,max_uses INTEGER,used INTEGER NOT NULL DEFAULT 0,expires TEXT,active INTEGER NOT NULL DEFAULT 1,created TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS admin_log(id TEXT PRIMARY KEY,user_id TEXT NOT NULL,action TEXT NOT NULL,detail TEXT NOT NULL,created TEXT NOT NULL);
   `);
   const columns=db.prepare('PRAGMA table_info(orders)').all().map(column=>column.name);
   if(!columns.includes('accessed_at')) db.exec('ALTER TABLE orders ADD COLUMN accessed_at TEXT');
@@ -34,6 +37,8 @@ export function openDatabase(path) {
   if(!eventColumns.includes('source')) db.exec('ALTER TABLE events ADD COLUMN source TEXT');
   if(!eventColumns.includes('channel')) db.exec('ALTER TABLE events ADD COLUMN channel TEXT');
   if(!columns.includes('channel')) db.exec('ALTER TABLE orders ADD COLUMN channel TEXT');
+  if(!columns.includes('coupon')) db.exec('ALTER TABLE orders ADD COLUMN coupon TEXT');
+  if(!columns.includes('list_cents')) db.exec('ALTER TABLE orders ADD COLUMN list_cents INTEGER');
   atomic(db,()=>{
     for(const table of ['orders','events']){
       const update=db.prepare(`UPDATE ${table} SET slug=? WHERE slug=?`);

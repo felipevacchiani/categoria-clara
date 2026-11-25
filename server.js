@@ -298,9 +298,9 @@ setInterval(()=>deliver().catch(()=>console.error('Error en cola de correo')),15
 const INDEXNOW_KEY='e1199d0c7bb97c888b899f433ad9bf21';
 async function pingIndexNow(){
   if(env.INDEX_PUBLIC!=='1'||env.NODE_ENV==='test') return;
-  const marker=dbPath===':memory:'?null:join(dirname(dbPath),'indexnow-'+SEO_UPDATED);
-  if(marker&&existsSync(marker)) return;
   const urls=['/','/guias',...shown().map(pathFor),...visibleCases().map(caseUrl)].map(p=>origin+p);
+  const marker=dbPath===':memory:'?null:join(dirname(dbPath),'indexnow-'+hash(urls.join(' ')).slice(0,12));
+  if(marker&&existsSync(marker)) return;
   const host=new URL(origin).host;
   const r=await fetch('https://api.indexnow.org/indexnow',{method:'POST',headers:{'Content-Type':'application/json; charset=utf-8'},body:JSON.stringify({host,key:INDEXNOW_KEY,keyLocation:origin+'/'+INDEXNOW_KEY+'.txt',urlList:urls}),signal:AbortSignal.timeout(20000)});
   console.log('IndexNow',r.status,urls.length,'URLs');

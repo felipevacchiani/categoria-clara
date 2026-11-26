@@ -110,18 +110,19 @@ pitch.monotributocheck = {
 // ---- Trabajo: liquidación final (pago) y aguinaldo (gratis) ----
 pitch['liquidacion-final'] = {
   title: 'Liquidación final',
-  tagline: 'Si te despidieron o renunciaste, calculá todo lo que te tienen que pagar con la reforma laboral 2026: indemnización, preaviso, vacaciones y aguinaldo.',
-  placeholders: { sueldo: 'Ej.: 1.500.000', tomadas: 'Ej.: 0', topeMonto: 'Ej.: 3.000.000' },
+  tagline: 'Si te despidieron o renunciaste, calculá cuánto te corresponde con la reforma laboral 2026 y, si ya cobraste, verificá si te pagaron bien: indemnización, preaviso, vacaciones y aguinaldo.',
+  placeholders: { sueldo: 'Ej.: 1.500.000', tomadas: 'Ej.: 0', topeMonto: 'Ej.: 3.000.000', promVariable: 'Ej.: 250.000', promOcasional: 'Ej.: 100.000', pagado: 'Ej.: 8.000.000' },
   includes: [
-    'El total a cobrar en mano y el bruto',
+    'El total a cobrar en mano y el bruto, con horas extra, comisiones y premios',
+    'Si ya cobraste: cuánto te deben y en qué conceptos buscar la diferencia',
     'Cada concepto con su importe: días trabajados, aguinaldo, vacaciones, preaviso, integración e indemnización',
     'La base de la indemnización según la Ley 27.802 (reforma laboral 2026), con tope de convenio y piso del 67%',
     'Qué controlar antes de firmar el recibo y cómo reclamar gratis si no te pagan',
     'PDF para guardar o llevar a un abogado o al sindicato'
   ],
   steps: [
-    ['Cargá tu caso', 'Cómo terminó la relación, fechas de ingreso y egreso, tu sueldo y las vacaciones que te tomaste.'],
-    ['Mirá qué te corresponde gratis', 'Te mostramos cuántos conceptos te tienen que pagar y el plazo de pago.'],
+    ['Cargá tu caso', 'Cómo terminó la relación, fechas, tu sueldo y adicionales, y lo que cobraste si ya te pagaron.'],
+    ['Mirá qué te corresponde gratis', 'Te mostramos el total aproximado, qué conceptos te corresponden y si te pagaron de menos.'],
     ['Pagá y descargá el informe', 'Dejás tu correo, pagás con Mercado Pago y descargás el PDF con cada importe al instante.']
   ],
   faq: [

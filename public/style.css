@@ -116,3 +116,15 @@ fieldset{border:1px solid var(--line,#ddd);border-radius:12px;padding:1rem;margi
 legend{font-weight:600;padding:0 .3rem}
 td form{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:0}
 td form input{max-width:9rem}
+/* Celular: sin scroll horizontal, cabecera compacta y aviso de cookies chico (la mayoría llega desde anuncios en el teléfono). */
+.svc-grid>*,.split>*{min-width:0}
+@media(max-width:560px){
+  .facts{grid-template-columns:1fr;gap:0}
+  .facts dt{font-size:.85rem}
+  .facts dd{margin-bottom:.7rem}
+  nav{gap:.25rem .9rem;font-size:.85rem}
+  nav a.nav-cta{padding:.3rem .7rem}
+  .cookie-bar{left:.5rem;right:.5rem;bottom:.5rem;padding:.6rem .8rem;gap:.5rem;font-size:.8rem;line-height:1.35}
+  .cookie-bar p{flex-basis:100%}
+  .cookie-bar button{padding:.35rem .9rem;font-size:.85rem}
+}

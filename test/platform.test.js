@@ -205,7 +205,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   const markup=await (await get('/')).text();
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
-  assert.equal(markup.match(/href="\/guias\//g).length,34);
+  assert.equal(markup.match(/href="\/guias\//g).length,37);
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/Reclamo a una|Mi cuenta|Servicio completo pendiente/);

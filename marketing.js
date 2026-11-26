@@ -81,6 +81,8 @@ for (const slug of ['consumo-defensa', 'envio-reclamo', 'vuelo-reclamo']) Object
 // ---- MonotributoCheck: servicio activo del sitio ----
 pitch.monotributocheck = {
   title: 'Recategorización del Monotributo',
+  seoTitle: 'Recategorización del Monotributo 2026: calculá tu categoría',
+  seoDescription: 'Sabé en 2 minutos en qué categoría del Monotributo quedás en la recategorización de febrero, cuánto vas a pagar y cuánto podés facturar. Tabla oficial de ARCA.',
   tagline: 'Sabé si te tenés que recategorizar antes del 5 de febrero, en qué categoría quedás y cuánto podés facturar en diciembre.',
   placeholders: { ingresos: 'Ej.: 22.000.000', diciembre: 'Ej.: 2.000.000', superficie: 'Ej.: 30', energia: 'Ej.: 3.300', alquileres: 'Ej.: 2.400.000', precio: 'Ej.: 150.000' },
   includes: [
@@ -110,6 +112,8 @@ pitch.monotributocheck = {
 // ---- Trabajo: liquidación final (pago) y aguinaldo (gratis) ----
 pitch['liquidacion-final'] = {
   title: 'Liquidación final',
+  seoTitle: 'Calculadora de liquidación final e indemnización por despido 2026',
+  seoDescription: 'Calculá gratis tu liquidación final por despido o renuncia con la reforma laboral 2026: indemnización, preaviso, vacaciones y aguinaldo. Verificá si te pagaron bien.',
   tagline: 'Si te despidieron o renunciaste, calculá cuánto te corresponde con la reforma laboral 2026 y, si ya cobraste, verificá si te pagaron bien: indemnización, preaviso, vacaciones y aguinaldo.',
   placeholders: { sueldo: 'Ej.: 1.500.000', tomadas: 'Ej.: 0', topeMonto: 'Ej.: 3.000.000', promVariable: 'Ej.: 250.000', promOcasional: 'Ej.: 100.000', pagado: 'Ej.: 8.000.000' },
   includes: [
@@ -137,6 +141,8 @@ pitch['liquidacion-final'] = {
 
 pitch.aguinaldo = {
   title: 'Calculadora de aguinaldo',
+  seoTitle: 'Calculadora de aguinaldo (SAC) diciembre 2026',
+  seoDescription: 'Calculá gratis tu aguinaldo de diciembre 2026, completo o proporcional, bruto y en mano, y cuándo te lo tienen que pagar.',
   tagline: 'Calculá gratis cuánto cobrás de aguinaldo, en mano y en bruto, completo o proporcional a los días trabajados.',
   placeholders: { sueldo: 'Ej.: 1.200.000' },
   includes: ['El aguinaldo bruto y en mano', 'Si te corresponde completo o proporcional', 'Hasta cuándo te lo tienen que pagar'],
@@ -172,12 +178,20 @@ const laboralCases = [
   { path: 'indemnizacion-por-despido-reforma-laboral-2026', service: 'liquidacion-final', title: 'Indemnización por despido con la reforma laboral 2026', intro: 'La Ley 27.802 mantuvo un mes de sueldo por año trabajado, pero cambió qué entra en la base. Calculá tu indemnización con las reglas vigentes.',
     points: ['Un mes de sueldo por año de servicio o fracción mayor de 3 meses, pasado el período de prueba.', 'La base es el mejor sueldo mensual, normal y habitual: sin aguinaldo, vacaciones ni premios no mensuales.', 'Si hay tope de convenio, la base no puede quedar por debajo del 67% del sueldo.', 'Nunca puede ser menor a un mes de sueldo.'] },
   { path: 'cuanto-me-corresponde-si-renuncio', service: 'liquidacion-final', title: '¿Cuánto te corresponde si renunciás?', intro: 'Al renunciar no cobrás indemnización, pero sí todo lo que generaste hasta tu último día. Calculá el total antes de firmar.',
-    points: ['Días trabajados del último mes.', 'Aguinaldo proporcional del semestre.', 'Vacaciones no gozadas proporcionales, más su aguinaldo.', 'La renuncia se envía por telegrama laboral gratuito o en persona ante la autoridad laboral.'] }
+    points: ['Días trabajados del último mes.', 'Aguinaldo proporcional del semestre.', 'Vacaciones no gozadas proporcionales, más su aguinaldo.', 'La renuncia se envía por telegrama laboral gratuito o en persona ante la autoridad laboral.'] },
+  { path: 'como-saber-si-mi-liquidacion-final-esta-bien', service: 'liquidacion-final', title: '¿Cómo saber si tu liquidación final está bien?', intro: 'Compará lo que cobraste con lo que te corresponde por ley. Cargá tu caso y el monto que te pagaron: te decimos gratis si hay una diferencia a tu favor.',
+    points: ['Revisá que el recibo detalle cada concepto: días trabajados, aguinaldo, vacaciones no gozadas y, si te despidieron sin causa, preaviso, integración e indemnización.', 'Los que más se omiten o se calculan mal son el aguinaldo sobre las vacaciones, el preaviso y la integración del mes.', 'Si cobrabas horas extra o comisiones todos los meses, tienen que estar en la base de la indemnización.', 'La liquidación se paga dentro de los 4 días hábiles desde el egreso.'] },
+  { path: 'horas-extra-y-comisiones-en-la-liquidacion-final', service: 'liquidacion-final', title: 'Horas extra y comisiones: ¿entran en la liquidación final?', intro: 'Sí. Los adicionales variables suman en el aguinaldo, las vacaciones y el preaviso, y si son habituales también en la indemnización por antigüedad.',
+    points: ['Se toma el promedio de lo cobrado en los últimos 6 meses.', 'Aguinaldo, vacaciones no gozadas, preaviso e integración se calculan sobre el sueldo más ese promedio.', 'Con la Ley 27.802, la indemnización por antigüedad usa la mejor remuneración mensual, normal y habitual: entran los adicionales que cobrás todos los meses.', 'Los premios ocasionales o anuales no entran en la base de la indemnización.'] },
+  { path: 'firme-la-liquidacion-final-puedo-reclamar', service: 'liquidacion-final', title: 'Firmé la liquidación final: ¿puedo reclamar si me pagaron de menos?', intro: 'Sí. Aunque hayas firmado el recibo sin reservas, si el pago fue insuficiente se toma como pago a cuenta y podés reclamar la diferencia.',
+    points: ['El art. 260 de la Ley de Contrato de Trabajo dice que un pago insuficiente es a cuenta del total, aunque lo recibas sin reservas.', 'El plazo para reclamar es de 2 años desde que se debía pagar (art. 256).', 'El primer paso es intimar por telegrama laboral, que es gratuito para el trabajador.', 'Antes de reclamar, calculá cuánto te deben y en qué conceptos está la diferencia.'] }
 ];
 
 // ---- CréditoCheck ----
 pitch.creditocheck = {
   title: 'Costo real de un préstamo',
+  seoTitle: 'Calculadora de costo de préstamo: CFT y tasa real',
+  seoDescription: 'Calculá el costo financiero real de un préstamo o de pagar en cuotas y compará dos ofertas en pesos de hoy.',
   tagline: 'Antes de sacar un préstamo personal, calculá cuánto te cuesta de verdad, compará dos ofertas y mirá cuánto valen las cuotas con la inflación.',
   placeholders: { capital: 'Ej.: 1.000.000', cuotaA: 'Ej.: 100.000', plazoA: 'Ej.: 12', cuotaB: 'Ej.: 60.000', plazoB: 'Ej.: 24', inflacion: 'Ej.: 2' },
   includes: [
@@ -212,6 +226,8 @@ const creditoCases = [
 // ---- AlquilerClaro ----
 pitch['alquiler-claro'] = {
   title: 'Aumento de alquiler',
+  seoTitle: 'Calculadora de aumento de alquiler por ICL o IPC 2026',
+  seoDescription: 'Calculá cuánto aumenta tu alquiler por ICL o IPC con los índices oficiales del BCRA e INDEC, y cuándo es el próximo ajuste.',
   tagline: 'Calculá cuánto vas a pagar de alquiler después del próximo aumento, por ICL o IPC, con los índices oficiales del BCRA y el INDEC.',
   placeholders: { monto: 'Ej.: 500.000' },
   includes: [
@@ -251,6 +267,8 @@ const alquilerCases = [
 // ---- Compras al exterior (gratis) ----
 pitch['compras-exterior'] = {
   title: 'Impuestos de compras al exterior',
+  seoTitle: 'Calculadora de impuestos de compras al exterior por courier',
+  seoDescription: 'Calculá cuánto pagás de impuestos y aranceles por una compra al exterior con envío courier.',
   tagline: 'Calculá gratis cuánto pagás de impuestos en una compra de Amazon, Shein o Temu por courier o correo, con la franquicia de US$ 400.',
   placeholders: { precio: 'Ej.: 250', envio: 'Ej.: 20', cambio: 'Ej.: 1.500' },
   includes: ['El costo final en pesos y en dólares', 'Cuánto es de impuestos y por qué', 'Cómo aprovechar la franquicia para pagar menos'],
@@ -277,6 +295,8 @@ const exteriorCases = [
 // ---- Ganancias Claro ----
 pitch['ganancias-claro'] = {
   title: 'Ganancias para empleados',
+  seoTitle: 'Calculadora de Ganancias para empleados 2026',
+  seoDescription: 'Calculá cuánto pagás de Ganancias como empleado en 2026 y cuánto ahorrás cargando alquiler, prepaga y servicio doméstico en SiRADIG.',
   tagline: 'Sabé si pagás Ganancias, cuánto te retienen en el año y cuánto te ahorrás cargando alquiler, prepaga y cargas de familia en el SiRADIG.',
   placeholders: { sueldo: 'Ej.: 4.500.000', hijos: 'Ej.: 1', alquiler: 'Ej.: 600.000', domestico: 'Ej.: 0', prepaga: 'Ej.: 150.000' },
   includes: [

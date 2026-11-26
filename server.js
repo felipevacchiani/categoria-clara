@@ -72,6 +72,9 @@ const isReclamo=s=>['consumo-defensa','envio-reclamo','vuelo-reclamo'].includes(
 const shown=()=>catalog.filter(s=>!s.sellable||price(s));
 // Canal de llegada (primer contacto): utm_source o el sitio de origen. Cookie propia de 30 días, sin datos personales.
 const reqStore=new AsyncLocalStorage();
+// Sal diaria de la sesión: deriva de la clave de datos (o de una aleatoria por proceso) y cambia cada día: no se puede seguir a nadie entre días.
+const processSalt=randomBytes(32);
+const sessionSalt=()=>createHash('sha256').update(key||processSalt).update(new Date().toISOString().slice(0,10)).digest();
 const channelNow=()=>reqStore.getStore()?.channel||'directo';
 const CHANNELS=[[/(^|\.)google\./,'google'],[/(^|\.)bing\.com$/,'bing'],[/instagram\.com$/,'instagram'],[/(facebook\.com|fb\.com|fb\.me)$/,'facebook'],[/(chatgpt\.com|openai\.com)$/,'chatgpt'],[/duckduckgo\.com$/,'duckduckgo'],[/(t\.co|twitter\.com|x\.com)$/,'x'],[/linkedin\.com$/,'linkedin'],[/(wa\.me|whatsapp\.com)$/,'whatsapp']];
 function channelFor(req,url){
@@ -85,7 +88,24 @@ function channelFor(req,url){
   const ch=hit?hit[1]:host.replace(/^www\./,'').split('.').slice(0,-1).join('-').replace(/[^a-z0-9_-]/g,'').slice(0,30)||'otro';
   return {channel:ch,set:true};
 }
-const event=(kind,slug,id=randomUUID(),source=null,channel=channelNow())=>sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source,channel) VALUES (?,?,?,?,?,?)',id,kind,slug,time(),source,channel||'directo');
+// Medición: cada evento lleva la sesión (sin cookie: hash diario de IP y navegador, la IP no se guarda) y si es tráfico interno.
+// Una vista previa sin inicio de formulario en la misma sesión registra antes el inicio (el aviso del navegador puede no llegar:
+// formulario autocompletado, "Editar los datos" o un bloqueador), así el embudo respeta el orden.
+const sessionNow=()=>reqStore.getStore()?.session||null;
+const internalNow=()=>reqStore.getStore()?.internal?1:0;
+const event=(kind,slug,id=randomUUID(),source=null,channel=channelNow(),internal=internalNow(),session=sessionNow())=>{
+  if(kind==='preview'&&session&&!one("SELECT 1 FROM events WHERE session=? AND slug=? AND kind='start_form'",session,slug)) sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source,channel,session,internal) VALUES (?,?,?,?,?,?,?,?)',randomUUID(),'start_form',slug,time(),source,channel||'directo',session,internal);
+  return sql('INSERT OR IGNORE INTO events(id,kind,slug,created,source,channel,session,internal) VALUES (?,?,?,?,?,?,?,?)',id,kind,slug,time(),source,channel||'directo',session,internal);
+};
+// Correos internos (Felipe, equipo y soporte): sus pedidos no cuentan en las métricas. Gmail ignora puntos y "+algo".
+const INTERNAL_EMAILS=['avacchiani@gmail.com','somos.bruck@gmail.com','soporte@categoriaclara.com.ar','yamilacravero@hotmail.com',...String(env.INTERNAL_EMAILS||'').split(',')].map(e=>e.trim().toLowerCase()).filter(Boolean);
+const normEmail=e=>{const [u,d]=String(e).toLowerCase().split('@');return d==='gmail.com'?u.split('+')[0].replace(/\./g,'')+'@'+d:String(e).toLowerCase();};
+const isInternalEmail=e=>/^felipevacchiani[^@]*@gmail\.com$/.test(normEmail(e))||INTERNAL_EMAILS.some(x=>normEmail(x)===normEmail(e));
+// Al arrancar: pedidos ya existentes de correos internos quedan marcados (y sus inicios de pago y compras dejan de contar).
+for(const o of db.prepare('SELECT o.id,u.email FROM orders o JOIN users u ON u.id=o.user_id WHERE o.internal=0').all()) if(isInternalEmail(o.email)){
+  db.prepare('UPDATE orders SET internal=1 WHERE id=?').run(o.id);
+  db.prepare('UPDATE events SET internal=1 WHERE id IN (?,?,?)').run('checkout:'+o.id,'purchase:'+o.id,'report:'+o.id);
+}
 const sourceOf=value=>value==='ficha'||cases.some(c=>c.path===value)?value:'ficha';
 function seal(value) {
   if(!key) return Buffer.concat([Buffer.from('0'),Buffer.from(value)]);
@@ -225,9 +245,9 @@ function acceptPayment(payment, order) {
       sql('INSERT INTO reports VALUES (?,?,?)',order.id,seal(report),time());
       sql("UPDATE orders SET state='ready', approved_payment=? WHERE id=?",paymentId,order.id);
       sql('INSERT INTO deliveries(order_id) VALUES (?)',order.id);
-      event('purchase',order.slug,'purchase:'+order.id,order.source,order.channel);
+      event('purchase',order.slug,'purchase:'+order.id,order.source,order.channel,order.internal||order.test?1:0,null);
       if(current.coupon) sql('UPDATE coupons SET used=used+1 WHERE code=?',current.coupon);
-      event('report_delivered',order.slug,'report:'+order.id,order.source,order.channel);
+      event('report_delivered',order.slug,'report:'+order.id,order.source,order.channel,order.internal||order.test?1:0,null);
     }
     const next=payment.status==='refunded'?'refunded':
       partial||['charged_back','in_mediation'].includes(payment.status)?'disputed':null;
@@ -341,6 +361,13 @@ async function startCheckout(order,secret) {
   if(order.state!=='pending'||order.mode!==mode||order.policy!==policy||order.version!==currentService?.version||!price(currentService)) fail(409,'El pedido no admite un pago en este momento.');
   if(Date.parse(order.created)+86400000<=Date.now()) fail(409,'El plazo para pagar este pedido venció. Volvé a armar el reclamo.');
   if(order.preference) return order.preference;
+  // Precio vigente: un pedido pendiente creado con otro precio (cambio en el panel o en release.json) se recalcula antes de pagar.
+  const listNow=price(currentService);
+  if((order.list_cents??order.cents)!==listNow){
+    const c=order.coupon?db.prepare('SELECT * FROM coupons WHERE code=?').get(order.coupon):null;
+    order.cents=c?discounted(listNow,c):listNow; order.list_cents=listNow;
+    sql('UPDATE orders SET cents=?,list_cents=? WHERE id=? AND preference IS NULL',order.cents,listNow,order.id);
+  }
   const attempt=sql('INSERT OR IGNORE INTO checkout_attempts VALUES (?,?)',order.id,time());
   if(!attempt.changes) fail(409,'El inicio del pago está pendiente de confirmación. Contactá a soporte con la referencia de tu pedido.');
   try {
@@ -354,7 +381,7 @@ async function startCheckout(order,secret) {
     if(destination.protocol!=='https:'||!['www.mercadopago.com.ar','sandbox.mercadopago.com.ar','www.mercadopago.com','sandbox.mercadopago.com'].includes(destination.hostname)) throw Error('Destino inválido');
     atomic(db,()=>{
       sql('UPDATE orders SET preference=? WHERE id=?',destination.href,order.id);
-      event('begin_checkout',order.slug,'checkout:'+order.id,order.source,order.channel);
+      event('begin_checkout',order.slug,'checkout:'+order.id,order.source,order.channel,order.internal||order.test||internalNow()?1:0);
     });
     return destination.href;
   } catch(error) {
@@ -465,6 +492,7 @@ async function route(req,res) {
   if(method==='GET'&&path==='/og.png') {res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'public, max-age=86400'});return res.end(readFileSync(new URL('./public/og.png',import.meta.url)));}
   if(method==='GET'&&['/style.css','/site.js','/portal.js'].includes(path)) return plain(res,200,readFileSync(new URL('./public'+path,import.meta.url)),path.endsWith('css')?'text/css; charset=utf-8':'text/javascript; charset=utf-8');
   const user=identity(req);
+  if(admin(user)) reqStore.getStore().internal=true;
   const show=(title,body,options)=>page(res,title,body,{user,...options});
   if(method==='GET'&&path==='/health') return plain(res,200,'ok');
   if(method==='GET'&&path==='/robots.txt') return plain(res,200,env.INDEX_PUBLIC==='1'?`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /pedido/\nSitemap: ${origin}/sitemap.xml\n`:'User-agent: *\nDisallow: /\n');
@@ -684,7 +712,9 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
         const id=randomUUID();
         const secret=randomBytes(32).toString('hex');
         const document={title:'Categoría Clara · '+s.name,lines:resultLines(s,result.lines,id)};
-        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source,channel,coupon,list_cents) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,finalCents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen,channelNow(),coupon?.code||null,cents);
+        const internal=internalNow()||(isInternalEmail(email)?1:0);
+        if(internal) reqStore.getStore().internal=true; // el inicio de pago de este pedido tampoco cuenta
+        sql('INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,access_digest,access_sealed,source,channel,coupon,list_cents,internal) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',id,account.id,s.slug,s.version,finalCents,'pending',seal(JSON.stringify(document)),time(),policy,mode,hash(secret),seal(secret),origen,channelNow(),coupon?.code||null,cents,internal);
         try {return redirect(res,await startCheckout(one('SELECT * FROM orders WHERE id=?',id),secret));}
         catch {return redirect(res,'/p/'+secret);}
       }
@@ -810,14 +840,15 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
   if(method==='GET'&&path==='/admin'){
     if(!admin(user)) return show('Administración',`<h1>Administración</h1><section class="panel">${post('/admin/ingresar',authFields+button('Ingresar'))}</section>`,{status:403});
     const rows=all('SELECT o.*,u.email,d.state delivery FROM orders o JOIN users u ON u.id=o.user_id LEFT JOIN deliveries d ON d.order_id=o.id ORDER BY o.created DESC LIMIT 200');
-    const metrics=all('SELECT slug,kind,COUNT(*) quantity FROM events GROUP BY slug,kind');
+    const metrics=all('SELECT slug,kind,COUNT(*) quantity FROM events WHERE internal=0 GROUP BY slug,kind');
     // Período del embudo: últimos 7 o 30 días, o todo (?periodo=7|30|todo). Por defecto 7 días: las campañas empezaron el 24/11/2026.
     const periodo=['7','30','todo'].includes(url.searchParams.get('periodo'))?url.searchParams.get('periodo'):'7';
     const since=periodo==='todo'?'0000':new Date(Date.now()-Number(periodo)*86400000).toISOString();
-    const funnel=all(`SELECT slug,COALESCE(source,'ficha') source,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE kind IN ('view_item','start_form','preview','begin_checkout','purchase') AND created>=? GROUP BY slug,COALESCE(source,'ficha') ORDER BY purchases DESC, views DESC`,since);
-    const bySlug=all(`SELECT slug,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE created>=? GROUP BY slug ORDER BY purchases DESC,views DESC`,since);
-    const byChannel=all(`SELECT COALESCE(channel,'directo') channel,slug,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE created>=? GROUP BY 1,2 HAVING views>0 OR purchases>0 ORDER BY purchases DESC,views DESC`,since);
-    const revenue=all(`SELECT o.slug,COALESCE(o.channel,'directo') channel,COUNT(*) n,SUM(o.cents) cents FROM orders o WHERE o.approved_payment IS NOT NULL AND o.state IN ('ready','disputed') AND o.mode=? AND o.created>=? GROUP BY 1,2 ORDER BY cents DESC`,mode,since);
+    const funnel=all(`SELECT slug,COALESCE(source,'ficha') source,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE kind IN ('view_item','start_form','preview','begin_checkout','purchase') AND internal=0 AND created>=? GROUP BY slug,COALESCE(source,'ficha') ORDER BY purchases DESC, views DESC`,since);
+    const S=k=>`COUNT(DISTINCT CASE WHEN kind='${k}' THEN session END)`;
+    const bySlug=all(`SELECT slug,SUM(kind='view_item') views,SUM(kind='start_form') starts,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases,${S('view_item')} sv,${S('start_form')} ss,${S('preview')} sp,${S('cta_click')} sc,${S('begin_checkout')} sb,${S('purchase')} sq FROM events WHERE internal=0 AND created>=? GROUP BY slug ORDER BY purchases DESC,views DESC`,since);
+    const byChannel=all(`SELECT COALESCE(channel,'directo') channel,slug,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE internal=0 AND created>=? GROUP BY 1,2 HAVING views>0 OR purchases>0 ORDER BY purchases DESC,views DESC`,since);
+    const revenue=all(`SELECT o.slug,COALESCE(o.channel,'directo') channel,COUNT(*) n,SUM(o.cents) cents FROM orders o WHERE o.approved_payment IS NOT NULL AND o.state IN ('ready','disputed') AND o.internal=0 AND o.test=0 AND o.mode=? AND o.created>=? GROUP BY 1,2 ORDER BY cents DESC`,mode,since);
     const drop=(a,b)=>a?Math.round((a-b)*1000/a)/10+'%':'—';
     const prices=catalog.filter(x=>x.sellable).map(x=>({s:x,base:release.products?.[x.slug]?.cents,override:one('SELECT * FROM price_overrides WHERE slug=?',x.slug)}));
     const coupons=all('SELECT * FROM coupons ORDER BY created DESC LIMIT 100');
@@ -830,7 +861,9 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     const requests=all('SELECT w.*,o.accessed_at FROM withdrawals w LEFT JOIN orders o ON o.id=w.reference ORDER BY w.created DESC LIMIT 100');
     const periodNav=`<p class="muted small">Período: ${[['7','7 días'],['30','30 días'],['todo','Todo']].map(([v,l])=>v===periodo?`<b>${l}</b>`:`<a href="/admin?periodo=${v}">${l}</a>`).join(' · ')}</p>`;
     return show('Administración',`<h1>Administración</h1>
-      <h2>Embudo por servicio</h2>${periodNav}${table(['Servicio','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Abandono visita → formulario','Abandono formulario → vista previa','Abandono vista previa → pago','Abandono pago → compra','Visita → compra'],bySlug.map(r=>[esc(r.slug),r.views,r.starts,r.previews,r.checkouts,r.purchases,drop(r.views,r.starts),drop(r.starts,r.previews),drop(r.previews,r.checkouts),drop(r.checkouts,r.purchases),rate(r.purchases,r.views)]))}
+      <h2>Embudo por servicio (personas)</h2>${periodNav}${table(['Servicio','Visitas','Formulario','Vista previa','Clic en comprar','Inicio de pago','Compra','Visita → compra','Vista previa → pago'],bySlug.map(r=>[esc(r.slug),r.sv,r.ss,r.sp,r.sc,r.sb,r.sq,rate(r.sq,r.sv),rate(r.sb,r.sp)]))}
+      <p class="muted small">Personas: sesiones únicas por día (sin cookie), desde el 26/11/2026. Sin tráfico interno ni pedidos de prueba.</p>
+      <h2>Embudo por servicio (eventos)</h2>${table(['Servicio','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Abandono visita → formulario','Abandono formulario → vista previa','Abandono vista previa → pago','Abandono pago → compra','Visita → compra'],bySlug.map(r=>[esc(r.slug),r.views,r.starts,r.previews,r.checkouts,r.purchases,drop(r.views,r.starts),drop(r.starts,r.previews),drop(r.previews,r.checkouts),drop(r.checkouts,r.purchases),rate(r.purchases,r.views)]))}
       <h2>Canal y servicio</h2>${table(['Canal','Servicio','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],byChannel.map(r=>[esc(r.channel),esc(r.slug),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
       <h2>Ingresos por servicio y canal (${live?'producción':'prueba'})</h2>${table(['Servicio','Canal','Ventas','Ingresos'],revenue.map(r=>[esc(r.slug),esc(r.channel),r.n,ars(r.cents)]))}
       <p class="muted small">Para el costo por venta, dividí el gasto del período en Google Ads o Meta por las compras de ese canal.</p>
@@ -839,14 +872,25 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
       ${post('/admin/cupon',`<fieldset><legend>Nuevo cupón</legend><label>Código<input name="code" required maxlength="30" pattern="[A-Za-z0-9_-]{3,30}" autocapitalize="characters"></label><label>Descuento (%)<input name="pct" type="number" min="1" max="90" required></label><label>Servicio<select name="slug">${slugOptions}</select></label><label>Usos máximos (vacío = sin límite)<input name="max" type="number" min="1"></label><label>Vence (opcional)<input name="expires" type="date"></label>${button('Crear cupón')}</fieldset>`)}
       <h2>Cambios en el panel</h2>${table(['Fecha','Usuario','Acción','Detalle'],log.map(l=>[esc(l.created.slice(0,16).replace('T',' ')),esc(l.email||'—'),esc(l.action),esc(l.detail)]))}
       <h2>Importes de pedidos con pago aprobado</h2>${table(['Ambiente','Estado','Pedidos','Importe bruto'],sales.map(r=>[esc(r.mode),esc(statuses[r.state]),r.quantity,ars(r.cents)]))}
-      <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents)+(o.coupon?` <span class="muted small">(${esc(o.coupon)})</span>`:''),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No')]))}
+      <h2>Pedidos recientes</h2>${table(['Referencia','Correo','Servicio','Importe','Estado','Aviso','Contenido entregado','Métricas'],rows.map(o=>[esc(o.id),esc(o.email),esc(o.slug),ars(o.cents)+(o.coupon?` <span class="muted small">(${esc(o.coupon)})</span>`:''),esc(statuses[o.state]),esc(o.delivery||'—'),esc(o.accessed_at?.slice(0,16).replace('T',' ')||'No'),o.internal?'Interno':post('/admin/pedido/prueba',`<input type="hidden" name="id" value="${esc(o.id)}">`+button(o.test?'Contar de nuevo':'Marcar como prueba'))+(o.test?' <span class="muted small">(prueba)</span>':'')]))}
       <h2>Preferencias pendientes de verificar</h2>${table(['Pedido','Servicio','Intento'],review.map(r=>[esc(r.id),esc(r.slug),esc(r.created)]))}
       <h2>Pagos adicionales para conciliar</h2>${table(['Pedido','ID en Mercado Pago','Estado'],duplicates.map(r=>[esc(r.order_id),esc(r.id),esc(r.status)]))}
-      <h2>Ventas por canal de llegada</h2>${table(['Canal','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],all(`SELECT COALESCE(channel,'directo') channel,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events GROUP BY 1 ORDER BY purchases DESC,views DESC`).map(r=>[esc(r.channel),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
+      <h2>Ventas por canal de llegada</h2>${table(['Canal','Visitas','Vistas previas','Inicios de pago','Compras','Visita → compra'],all(`SELECT COALESCE(channel,'directo') channel,SUM(kind='view_item') views,SUM(kind='preview') previews,SUM(kind='begin_checkout') checkouts,SUM(kind='purchase') purchases FROM events WHERE internal=0 GROUP BY 1 ORDER BY purchases DESC,views DESC`).map(r=>[esc(r.channel),r.views,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views)]))}
       <h2>Embudo por servicio y página de entrada</h2>${periodNav}${table(['Servicio','Entrada','Visitas','Inicios de formulario','Vistas previas','Inicios de pago','Compras','Visita → compra','Vista previa → compra'],funnel.map(r=>[esc(r.slug),esc(r.source==='ficha'?'Ficha del servicio':(c=>c?caseUrl(c):r.source)(cases.find(x=>x.path===r.source))),r.views,r.starts,r.previews,r.checkouts,r.purchases,rate(r.purchases,r.views),rate(r.purchases,r.previews)]))}
       <p class="muted small">Conteos de eventos: una persona puede generar varias visitas o vistas previas.</p>
       <h2>Eventos de conversión</h2>${table(['Servicio','Evento','Cantidad'],metrics.map(r=>[esc(r.slug),esc(r.kind),r.quantity]))}
       <h2>Solicitudes de arrepentimiento</h2>${table(['Código','Pedido','Correo','Contenido entregado','Estado','Acción'],requests.map(r=>[esc(r.id),esc(r.reference),esc(r.email),esc(r.accessed_at?.slice(0,16).replace('T',' ')||'No'),esc(r.status),r.status==='received'?post('/admin/arrepentimiento',`<input type="hidden" name="id" value="${esc(r.id)}">`+button('Marcar atendida')):'—']))}`);
+  }
+  if(method==='POST'&&path==='/admin/pedido/prueba'){
+    if(!admin(user)) fail(403,'Área restringida.');
+    const v=await form(req);
+    const o=one('SELECT id,test FROM orders WHERE id=?',String(v.id||''));
+    if(!o) fail(404,'Pedido inexistente.');
+    const t=o.test?0:1;
+    sql('UPDATE orders SET test=? WHERE id=?',t,o.id);
+    sql('UPDATE events SET internal=? WHERE id IN (?,?,?)',t,'checkout:'+o.id,'purchase:'+o.id,'report:'+o.id);
+    sql('INSERT INTO admin_log VALUES (?,?,?,?,?)',randomUUID(),user.id,'pedido',`${o.id}: ${t?'marcado como prueba':'vuelve a contar'}`,time());
+    return redirect(res,'/admin');
   }
   if(method==='POST'&&['/admin/precio','/admin/cupon','/admin/cupon/estado'].includes(path)){
     if(!admin(user)) fail(403,'Área restringida.');
@@ -940,7 +984,13 @@ if(process.argv[2]==='admin'){
     if(secure) res.setHeader('Strict-Transport-Security','max-age=31536000');
     let ch={channel:'directo',set:false};
     try{ if(req.method==='GET'){ch=channelFor(req,new URL(req.url,origin)); if(ch.set) res.setHeader('Set-Cookie',`cc_src=${ch.channel}; Path=/; Max-Age=2592000; SameSite=Lax${secure?'; Secure':''}; HttpOnly`);} else { const c=(req.headers.cookie||'').match(/(?:^|;\s*)cc_src=([a-z0-9_-]{1,30})/)?.[1]; if(c) ch={channel:c,set:false}; } }catch{}
-    reqStore.run({channel:ch.channel},()=>route(req,res)).catch(error=>{
+    // Tráfico interno: /?internal=1 marca este dispositivo por un año (/?internal=0 lo desmarca).
+    const qi=req.method==='GET'?new URL(req.url,origin).searchParams.get('internal'):null;
+    if(qi==='1'||qi==='0') res.appendHeader('Set-Cookie',`cc_internal=${qi==='1'?'1; Max-Age=31536000':'; Max-Age=0'}; Path=/; SameSite=Lax${secure?'; Secure':''}; HttpOnly`);
+    const internal=qi==='1'||(qi!=='0'&&/(?:^|;\s*)cc_internal=1/.test(req.headers.cookie||''));
+    const ip=env.TRUST_PROXY==='1'?req.headers['x-real-ip']||req.socket.remoteAddress:req.socket.remoteAddress;
+    const session=createHash('sha256').update(sessionSalt()).update(String(ip)).update(String(req.headers['user-agent']||'')).digest('hex').slice(0,16);
+    reqStore.run({channel:ch.channel,session,internal},()=>route(req,res)).catch(error=>{
       if(res.headersSent){res.destroy();return;}
       if(!error.status) console.error('Error interno:',error.code||error.name);
       if(req.url.startsWith('/api/')){res.writeHead(error.status||500,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});return res.end(JSON.stringify({error:error.status?error.message:'No se pudo procesar la solicitud.'}));}

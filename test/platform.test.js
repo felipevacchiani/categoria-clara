@@ -371,7 +371,14 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(withCoupon,/\$\s?6\.320,00 <span class="muted small">\(LANZA20\)/);
   assert.match(withCoupon,/monotributocheck: \$\s?7\.900,00/);
   assert.match(withCoupon,/LANZA20: 20% en monotributocheck, 1 usos/);
-  assert.match(withCoupon,/Embudo por servicio<\/h2><p class="muted small">Período: <b>7 días<\/b>/);
+  assert.match(withCoupon,/Embudo por servicio \(personas\)<\/h2><p class="muted small">Período: <b>7 días<\/b>/);
+  assert.match(withCoupon,/Marcar como prueba/);
+  // Pedidos de correos internos quedan marcados y no cuentan (Gmail ignora puntos y +sufijo)
+  assert.equal((await buy({email:'felipe.vacchiani+prueba@gmail.com',email2:'felipe.vacchiani+prueba@gmail.com'})).status,303);
+  assert.match(await (await get('/admin',admin)).text(),/felipe\.vacchiani\+prueba@gmail\.com<\/td>(?:<td>[^<]*<\/td>){5}<td>Interno<\/td>/);
+  // /?internal=1 deja la cookie de tráfico interno; /?internal=0 la borra
+  assert.match((await get('/?internal=1')).headers.get('set-cookie')||'',/cc_internal=1; Max-Age=31536000/);
+  assert.match((await get('/?internal=0')).headers.get('set-cookie')||'',/cc_internal=; Max-Age=0/);
   assert.equal((await send('/admin/cupon/estado',{code:'LANZA20'},admin)).status,303);
   assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:'LANZA20'})).status,422);
   assert.equal((await send('/admin/precio',{slug:'monotributocheck',reset:'1'},admin)).status,303);
@@ -392,7 +399,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   let purged='';
   purge.stdout.on('data',chunk=>{purged+=chunk;});
   assert.equal((await once(purge,'exit'))[0],0);
-  assert.match(purged,/2 pedidos depurados/); // la compra original y la del cupón
+  assert.match(purged,/3 pedidos depurados/); // la compra original, la del cupón y la interna
   assert.equal((await get(privatePath+'/pdf')).status,410);
   assert.match(await (await get(privatePath)).text(),/política de conservación/);
 });

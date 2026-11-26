@@ -36,8 +36,13 @@ export function openDatabase(path) {
   const eventColumns=db.prepare('PRAGMA table_info(events)').all().map(column=>column.name);
   if(!eventColumns.includes('source')) db.exec('ALTER TABLE events ADD COLUMN source TEXT');
   if(!eventColumns.includes('channel')) db.exec('ALTER TABLE events ADD COLUMN channel TEXT');
+  if(!eventColumns.includes('session')) db.exec('ALTER TABLE events ADD COLUMN session TEXT');
+  if(!eventColumns.includes('internal')) db.exec('ALTER TABLE events ADD COLUMN internal INTEGER NOT NULL DEFAULT 0');
+  db.exec('CREATE INDEX IF NOT EXISTS events_session ON events(session,slug,kind)');
   if(!columns.includes('channel')) db.exec('ALTER TABLE orders ADD COLUMN channel TEXT');
   if(!columns.includes('coupon')) db.exec('ALTER TABLE orders ADD COLUMN coupon TEXT');
+  if(!columns.includes('internal')) db.exec('ALTER TABLE orders ADD COLUMN internal INTEGER NOT NULL DEFAULT 0');
+  if(!columns.includes('test')) db.exec('ALTER TABLE orders ADD COLUMN test INTEGER NOT NULL DEFAULT 0');
   if(!columns.includes('list_cents')) db.exec('ALTER TABLE orders ADD COLUMN list_cents INTEGER');
   atomic(db,()=>{
     for(const table of ['orders','events']){

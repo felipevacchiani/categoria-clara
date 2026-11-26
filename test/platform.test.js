@@ -142,7 +142,9 @@ test('Liquidación final y aguinaldo: reforma 2026, tope del 67%, período de pr
   assert.throws(()=>evaluate(liq,{...base,egreso:'2018-01-01'}),/posterior/);
   const teaser=liq.teaser(evaluate(liq,base).lines);
   assert.equal(teaser.facts[0][0],'Total estimado en mano');
-  assert.match(teaser.facts[0][1],/^Entre \$ [\d.]+ y \$ [\d.]+$/);
+  assert.match(teaser.facts[0][1],/^\$ \d{2}\.█{3}\.█{3}$/); // solo los dos primeros dígitos
+  assert.match(teaser.headline,/^Detectamos 9 conceptos/);
+  assert.equal(teaser.cta,'Ver mi liquidación completa');
   assert.match(teaser.facts[1][1],/^9: días trabajados del mes, .*indemnización por antigüedad$/);
   assert.doesNotMatch(JSON.stringify(teaser),/,\d{2}/); // nunca centavos ni importes exactos
   const ag=getService('aguinaldo');
@@ -364,6 +366,12 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.equal((await send('/admin/cupon',{code:'lanza20',pct:'20',slug:'monotributocheck',max:'1'},admin)).status,303);
   assert.equal((await send('/admin/cupon',{code:'LANZA20',pct:'10'},admin)).status,409);
   assert.match(await (await send('/servicios/monotributocheck',{...mono,action:'preview'})).text(),/name="cupon"/);
+  const prev=await (await send('/servicios/monotributocheck',{...mono,action:'preview'})).text();
+  assert.match(prev,/<a class="button cta-top" href="#comprar" data-cta="monotributocheck">Ver mi informe completo – \$\s?7\.900,00<\/a>/);
+  assert.match(prev,/<aside class="panel aside buy" id="comprar">/);
+  assert.match(prev,/<button name="action" value="order">Ver mi informe completo – \$\s?7\.900,00<\/button>/);
+  assert.match(prev,/Pago seguro con Mercado Pago/);
+  assert.equal((await fetch(local+'/eventos/inicio',{method:'POST',headers:{Origin:origin},body:new URLSearchParams({slug:'monotributocheck',kind:'cta'})})).status,204);
   assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:'NOEXISTE'})).status,422);
   assert.equal((await send('/servicios/liquidacion-final',{...formValues['liquidacion-final'],action:'order',consent:'local-v1',email:'cupon@example.test',email2:'cupon@example.test',cupon:'lanza20'})).status,422);
   assert.equal((await buy({email:'cupon@example.test',email2:'cupon@example.test',cupon:' lanza20 '})).status,303);

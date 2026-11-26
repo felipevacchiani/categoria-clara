@@ -128,3 +128,11 @@ td form input{max-width:9rem}
   .cookie-bar p{flex-basis:100%}
   .cookie-bar button{padding:.35rem .9rem;font-size:.85rem}
 }
+/* Vista previa: botón de compra arriba, frase de resultado y señales de confianza */
+.headline{font-weight:600;color:var(--ink,#16181d);margin:.2rem 0 .8rem}
+.cta-wrap{margin:0 0 1.2rem}
+.cta-top{display:block;text-align:center;font-weight:700;padding:.9rem 1rem;border-radius:12px;background:#e8a33a;color:#16181d;text-decoration:none;max-width:34rem}
+.trust-row{list-style:none;padding:0;margin:.6rem 0 0;display:flex;flex-wrap:wrap;gap:.3rem .9rem;font-size:.85rem;color:var(--muted,#5b6170)}
+.trust-row li::before{content:"✓ ";color:#2f7d4f;font-weight:700}
+#comprar{scroll-margin-top:1rem}
+@media(min-width:900px){.cta-wrap{display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap}.cta-top{display:inline-block}.cta-wrap .trust-row{margin:0}}

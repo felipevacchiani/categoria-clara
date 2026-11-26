@@ -14,6 +14,11 @@ search?.addEventListener('input', () => {
   }
   document.querySelector('#results').textContent = `${visible} servicio${visible===1?'':'s'}`;
 });
+// Clic en el botón de compra de la vista previa (antes de cargar el correo).
+document.querySelectorAll('[data-cta]').forEach(link => link.addEventListener('click', () => {
+  navigator.sendBeacon('/eventos/inicio', new URLSearchParams({slug: link.dataset.cta, kind: 'cta', origen: document.querySelector('input[name=origen]')?.value || 'ficha'}));
+  setTimeout(() => document.querySelector('#comprar input[name=email]')?.focus({preventScroll: true}), 350);
+}, {once: true}));
 const serviceForm = document.querySelector('form[action^="/servicios/"]');
 serviceForm?.addEventListener('input', () => {
   const slug = serviceForm.getAttribute('action').split('/').pop();

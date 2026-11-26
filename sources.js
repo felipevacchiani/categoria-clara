@@ -10,6 +10,7 @@ export const sources = {
   aguinaldo:['Ley 23.041 · Sueldo anual complementario','https://www.argentina.gob.ar/normativa/nacional/ley-23041-54479/texto'],
   'alquiler-claro':['BCRA · Índice para Contratos de Locación','https://www.bcra.gob.ar/PublicacionesEstadisticas/Principales_variables_datos.asp'],
   'compras-exterior':['ARCA · Régimen de pequeños envíos','https://servicioscf.afip.gob.ar/publico/sitio/contenido/novedad/ver.aspx?id=5939'],
+  'mi-facturacion':['ARCA · Monotributo: categorías y topes','https://www.arca.gob.ar/monotributo/categorias.asp'],
   'ganancias-claro':['ARCA · Ganancias: deducciones y escalas','https://www.arca.gob.ar/gananciasYBienes/ganancias/personas-humanas-sucesiones-indivisas/deducciones/default.asp'],
   monotributocheck:['ARCA · Categorías vigentes','https://www.arca.gob.ar/monotributo/categorias.asp'],
   importafacil:['ARCA · Tributos en courier','https://www.arca.gob.ar/envios-internacionales/courier/conceptos-generales/tributos.asp'],

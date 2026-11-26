@@ -27,8 +27,8 @@ export const TABLE = {
 
 export const RECATEGORIZACION = { vence: '2027-02-05', periodo: 'enero a diciembre de 2026' };
 
-const ACTIVIDAD = { servicios: { label: 'Prestación de servicios' }, bienes: { label: 'Venta de cosas muebles (productos)' } };
-const CATEGORIAS = Object.fromEntries(TABLE.categorias.map(c => [c.cat, { label: 'Categoría ' + c.cat }]));
+export const ACTIVIDAD = { servicios: { label: 'Prestación de servicios' }, bienes: { label: 'Venta de cosas muebles (productos)' } };
+export const CATEGORIAS = Object.fromEntries(TABLE.categorias.map(c => [c.cat, { label: 'Categoría ' + c.cat }]));
 const SINO = { no: { label: 'No' }, si: { label: 'Sí' } };
 
 const money = value => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(value).replace(/ /g, ' ');

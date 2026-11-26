@@ -293,6 +293,32 @@ const exteriorCases = [
 ];
 
 // ---- Ganancias Claro ----
+pitch['mi-facturacion'] = {
+  title: 'Mi facturación',
+  seoTitle: 'Control de facturación del Monotributo con avisos de tope y recategorización',
+  seoDescription: 'Llevá tu facturación del Monotributo durante el año y recibí un aviso por correo antes de pasarte del tope de tu categoría o de cada recategorización.',
+  tagline: 'Cargá tus facturas durante el año y te avisamos por correo antes de pasarte del tope de tu categoría y antes de cada recategorización.',
+  placeholders: { facturado: 'Ej.: 18.000.000' },
+  includes: [
+    'Tu facturación de los últimos 12 meses, siempre al día',
+    'Importás el archivo de Mis Comprobantes de ARCA o cargás factura por factura',
+    'Aviso por correo al 80% y al 100% del tope de tu categoría',
+    'Aviso antes de cada recategorización, con lo facturado en el período que mira ARCA',
+    'Acceso por 12 meses, sin renovación automática'
+  ],
+  steps: [
+    ['Contanos tu situación', 'Actividad, categoría y cuánto facturaste en los últimos 12 meses.'],
+    ['Mirá cómo estás gratis', 'Te mostramos qué porcentaje del tope ya usaste y la próxima recategorización.'],
+    ['Activá el seguimiento', 'Pagás una vez, entrás al portal y te avisamos por correo durante 12 meses.']
+  ],
+  faq: [
+    ['¿Se renueva solo?', 'No. Es un pago único por 12 meses. Antes de que venza te avisamos y decidís si lo renovás.'],
+    ['¿Necesito mi clave fiscal?', 'No. Cargás tus facturas a mano o subís el archivo que descargás de Mis Comprobantes en ARCA.'],
+    ['¿Qué pasa con mis datos?', 'Los usamos solo para mostrarte tu facturación y mandarte los avisos. Los podés borrar cuando quieras desde el portal.']
+  ],
+  mock: ['Tope usado', 'Facturación de 12 meses', 'Avisos por correo', 'Recategorización']
+};
+
 pitch['ganancias-claro'] = {
   title: 'Ganancias para empleados',
   seoTitle: 'Calculadora de Ganancias para empleados 2026',

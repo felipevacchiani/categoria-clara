@@ -22,6 +22,7 @@ const formValues={
   'creditocheck':{capital:'1.000.000',cuotaA:'100.000',plazoA:'12',comparar:'si',cuotaB:'60.000',plazoB:'24',inflacion:'2'},
   'alquiler-claro':{monto:'500.000',indice:'ipc',periodo:'4',desde:'2026-08-01'},
   'compras-exterior':{precio:'500',envio:'20',arancel:'a20',cupo:'si',cambio:'1.000'},
+  'mi-facturacion':{actividad:'servicios',categoria:'C',facturado:'20.000.000'},
   'ganancias-claro':{sueldo:'5.000.000',conyuge:'no',hijos:'0',hijos50:'si',alquiler:'0',domestico:'0',prepaga:'0'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
   'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',aportes:'general',billeteras:'si'},
@@ -40,7 +41,7 @@ const formValues={
   'envio-reclamo':{tipo:'no_entregado',empresa:'Operador A',promesa:'2026-01-01',revision:'2026-01-07',hechos:'Sin entrega.',pedido:'entrega',envio:'2026-01-08',plazo:'10'},
   'consumo-defensa':{tipo:'garantia',empresa:'Local A',fecha:'2026-01-01',hechos:'Se entregó con una falla.',pedido:'reposición',envio:'2026-01-05',plazo:'10'}
 };
-const expected=['2026-01-11','20.','4.000','Diferencia','90.','conviene la oferta','540.566,91','US$ 132,83','pagás','14 dígitos','subís de la categoría C a la D','12.000.000,00','397.826,09','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
+const expected=['2026-01-11','20.','4.000','Diferencia','90.','conviene la oferta','540.566,91','US$ 132,83','pagás','usaste el 81% del tope de la categoría C','14 dígitos','subís de la categoría C a la D','12.000.000,00','397.826,09','126.000','1980','España','menor','EEUU','Madre','Se canceló','25.00%','3.000','-','6 días','reposición'];
 for(const [i, service] of services.entries()){
   test(service.name+' procesa y valida sus datos',()=>{
     const {lines}=evaluate(service,formValues[service.slug]);
@@ -291,6 +292,33 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.equal((await send('/cuenta/eliminar',{confirm:'ELIMINAR'},beto)).status,200);
   assert.equal(peek.prepare("SELECT COUNT(*) n FROM users WHERE email='beto@example.test'").get().n,0);
   peek.close();
+  // Mi facturación: el pase de 12 meses da acceso al portal y vence; una compra devuelta no da acceso
+  const caro=(await send('/cuenta/crear',{email:'caro@example.test',password:'clave de caro 12345',password2:'clave de caro 12345',consent:'local-v1'})).headers.get('set-cookie').split(';')[0];
+  {const w=new (await import('node:sqlite')).DatabaseSync(env.DB_PATH);
+   const uid=w.prepare("SELECT id FROM users WHERE email='caro@example.test'").get().id;
+   w.prepare('INSERT OR IGNORE INTO verified_emails VALUES (?)').run(uid);
+   const ins=(id,slug,state,days)=>w.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES (?,?,?,'1.0.0',100,?,'x',?,'local-v1','test',?)").run(id,uid,slug,state,new Date(Date.now()-days*86400000).toISOString(),'pago-'+id);
+   ins('caro-mono','monotributocheck','refunded',10);
+   w.close();
+   assert.equal((await get('/api/facturacion',caro)).status,403); // devuelta: sin acceso
+   const w2=new (await import('node:sqlite')).DatabaseSync(env.DB_PATH);
+   w2.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES ('caro-vieja',?,'mi-facturacion','1.0.0',100,'ready','x',?,'local-v1','test','pago-cv')").run(uid,new Date(Date.now()-400*86400000).toISOString());
+   w2.close();
+   assert.equal((await get('/api/facturacion',caro)).status,403); // pase vencido
+   const w3=new (await import('node:sqlite')).DatabaseSync(env.DB_PATH);
+   w3.prepare("INSERT INTO orders(id,user_id,slug,version,cents,state,result,created,policy,mode,approved_payment) VALUES ('caro-pase',?,'mi-facturacion','1.0.0',100,'ready','x',?,'local-v1','test','pago-cp')").run(uid,new Date(Date.now()-300*86400000).toISOString());
+   w3.close();}
+  assert.equal((await get('/api/facturacion',caro)).status,200);
+  assert.match(await (await get('/mi-facturacion',caro)).text(),/Acceso hasta el \d{2}\/\d{2}\/\d{4}/);
+  // Avisos por correo: 80% del tope, sin repetir, recategorización y fin del pase
+  assert.equal((await api('/api/facturacion/facturas',{facturas:[{fecha:'2026-11-01',tipo:'F',monto:24000000,key:'grande'}]})).status,200);
+  const avisos=async day=>{const p=spawn(process.execPath,['server.js','avisos',day],{env});let out='';p.stdout.on('data',c=>{out+=c;});await once(p,'exit');return out;};
+  let out=await avisos('2026-12-01');
+  assert.match(out,/Usaste el 8\d% del tope de tu categoría/);
+  assert.doesNotMatch(await avisos('2026-12-02'),/Usaste el/); // no se repite
+  out=await avisos('2027-01-20');
+  assert.match(out,/La recategorización del Monotributo vence el 05\/02\/2027/);
+  assert.match(out,/Tu acceso a Mi facturación está por vencer/); // el pase de caro vence en menos de 15 días
   assert.equal((await get('/portal.js')).status,200);
   const tabla=await (await get('/tabla.json')).json();
   assert.equal(tabla.categorias.length,11); assert.equal(tabla.categorias[0].cat,'A'); assert.ok(tabla.recategorizacion.vence);
@@ -414,7 +442,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   let purged='';
   purge.stdout.on('data',chunk=>{purged+=chunk;});
   assert.equal((await once(purge,'exit'))[0],0);
-  assert.match(purged,/3 pedidos depurados/); // la compra original, la del cupón y la interna
+  assert.match(purged,/6 pedidos depurados/); // compra original, cupón, interna y los 3 pedidos viejos de caro
   assert.equal((await get(privatePath+'/pdf')).status,410);
   assert.match(await (await get(privatePath)).text(),/política de conservación/);
 });

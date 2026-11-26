@@ -170,7 +170,20 @@ function takeToken(raw,purpose,consume=true){
   return row?one('SELECT * FROM users WHERE id=?',row.user_id):null;
 }
 // El portal exige haber probado el control del correo: una contraseña creada sin verificar no abre comprobantes.
-const hasPortal=account=>Boolean(account&&(admin(account)||(verified(account)&&one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',account.id))));
+// Acceso al portal: lo da MonotributoCheck (sin vencimiento, como se ofreció) o Mi facturación (12 meses desde la compra).
+// Una compra devuelta no da acceso.
+const PORTAL_DAYS=365;
+const portalUntil=account=>{
+  if(!account) return null;
+  if(admin(account)) return 'siempre';
+  const paid="approved_payment IS NOT NULL AND state NOT IN ('refunded','charged_back') AND user_id=?";
+  if(one(`SELECT 1 FROM orders WHERE slug='monotributocheck' AND ${paid}`,account.id)) return 'siempre';
+  const last=one(`SELECT created FROM orders WHERE slug='mi-facturacion' AND ${paid} ORDER BY created DESC LIMIT 1`,account.id);
+  if(!last) return null;
+  const until=new Date(Date.parse(last.created)+PORTAL_DAYS*86400000).toISOString().slice(0,10);
+  return until>=today()?until:null;
+};
+const hasPortal=account=>Boolean(account&&(admin(account)||(verified(account)&&portalUntil(account))));
 function portalInvite(order){
   const owner=one('SELECT email,password FROM users WHERE id=?',order.user_id);
   if(!owner) return '';
@@ -346,6 +359,45 @@ async function pingIndexNow(){
 if(!process.argv[2]&&env.NODE_ENV!=='test') setTimeout(()=>pingIndexNow().catch(e=>console.error('IndexNow:',e.message)),30000).unref();
 if(!process.argv[2]&&env.NODE_ENV!=='test') startIndices(dbPath===':memory:'?null:join(dirname(dbPath),'indices.json')).catch(()=>{});
 if(!process.argv[2]&&env.NODE_ENV!=='test') setInterval(()=>sweepPending().catch(()=>console.error('Error en el barrido de pagos')),120000).unref();
+// Avisos de Mi facturación por correo: 80% y 100% del tope, recategorización y fin del acceso. Cada aviso sale una sola vez.
+db.exec('CREATE TABLE IF NOT EXISTS portal_alerts(user_id TEXT NOT NULL,key TEXT NOT NULL,created TEXT NOT NULL,PRIMARY KEY(user_id,key))');
+const fmtDay=iso=>iso.split('-').reverse().join('/');
+async function runPortalAlerts(now=new Date()){
+  const day=now.toISOString().slice(0,10), y=now.getUTCFullYear(), half=`${y}-${now.getUTCMonth()<6?'1':'2'}`;
+  const sum=(userId,from,to)=>(one("SELECT COALESCE(SUM(CASE WHEN tipo='NC' THEN -cents ELSE cents END),0) c FROM invoices WHERE user_id=? AND fecha>=? AND fecha<=?",userId,from,to)?.c||0)/100;
+  const users=all("SELECT DISTINCT u.id,u.email FROM users u JOIN verified_emails v ON v.user_id=u.id JOIN orders o ON o.user_id=u.id WHERE o.slug IN ('monotributocheck','mi-facturacion') AND o.approved_payment IS NOT NULL");
+  let sent=0;
+  for(const u of users){
+    const until=portalUntil(u);
+    if(!until) continue;
+    const notify=async(key,subject,text)=>{
+      if(!sql('INSERT OR IGNORE INTO portal_alerts VALUES (?,?,?)',u.id,key,now.toISOString()).changes) return;
+      try{await mailLink(u.email,subject,text,origin+'/mi-facturacion',`alert:${u.id}:${key}`);sent++;}
+      catch{sql('DELETE FROM portal_alerts WHERE user_id=? AND key=?',u.id,key);}
+    };
+    const perfil=one('SELECT categoria FROM portal_profiles WHERE user_id=?',u.id);
+    const c=perfil&&MONO_TABLE.categorias.find(x=>x.cat===perfil.categoria);
+    if(c){
+      const total=sum(u.id,new Date(now.getTime()-365*86400000).toISOString().slice(0,10),day);
+      const money=n=>'$ '+n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+      if(total>=c.ingresos) await notify(`tope100:${c.cat}:${half}`,`Te pasaste del tope de la categoría ${c.cat}`,`En los últimos 12 meses facturaste ${money(total)} y el tope de la categoría ${c.cat} es ${money(c.ingresos)}. En la próxima recategorización vas a subir de categoría. Mirá el detalle en Mi facturación:`);
+      else if(total>=c.ingresos*0.8) await notify(`tope80:${c.cat}:${half}`,`Usaste el ${Math.floor(total*100/c.ingresos)}% del tope de tu categoría`,`En los últimos 12 meses facturaste ${money(total)}: te quedan ${money(c.ingresos-total)} antes de pasarte del tope de la categoría ${c.cat}. Mirá el detalle en Mi facturación:`);
+    }
+    const vence=RECATEGORIZACION.vence, dias=(Date.parse(vence)-Date.parse(day))/86400000;
+    if(dias>=0&&dias<=20){
+      const [vy,vm]=vence.split('-').map(Number);
+      const [from,to]=vm<=6?[`${vy-1}-01-01`,`${vy-1}-12-31`]:[`${vy-1}-07-01`,`${vy}-06-30`];
+      const money=n=>'$ '+n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
+      await notify(`recat:${vence}`,`La recategorización del Monotributo vence el ${fmtDay(vence)}`,`ARCA mira lo que facturaste del ${fmtDay(from)} al ${fmtDay(to)}: según lo que cargaste en el portal son ${money(sum(u.id,from,to))}. Revisá en qué categoría quedás antes del vencimiento:`);
+    }
+    if(until!=='siempre'&&(Date.parse(until)-Date.parse(day))/86400000<=15) await notify(`fin:${until}`,'Tu acceso a Mi facturación está por vencer',`Tu acceso vence el ${fmtDay(until)}. Si querés seguir recibiendo los avisos, podés renovarlo desde el sitio:`);
+  }
+  return sent;
+}
+if(!process.argv[2]&&env.NODE_ENV!=='test'){
+  setTimeout(()=>runPortalAlerts().catch(()=>console.error('Error en los avisos del portal')),60000).unref();
+  setInterval(()=>runPortalAlerts().catch(()=>console.error('Error en los avisos del portal')),6*3600000).unref();
+}
 if(!process.argv[2]) setInterval(()=>{try {purge();} catch {console.error('Error en la depuración');}},3600000).unref();
 function noteBlock(order) {
   let lines;
@@ -512,7 +564,8 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     if(!verified(user)&&!admin(user)&&one('SELECT 1 FROM orders WHERE user_id=? AND approved_payment IS NOT NULL LIMIT 1',user.id)) return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}<section class="panel wide note-box"><h2>Falta un paso</h2><p>Tu compra ya está asociada a este correo. Abrí el enlace que te mandamos para confirmar que el correo es tuyo y se activa el portal.</p></section>`,{canonical:'/mi-facturacion'});
     if(!hasPortal(user)) return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}<section class="panel wide note-box"><h2>El portal viene con tu informe</h2><p>Esta cuenta todavía no tiene una compra. Al comprar el informe de recategorización (${ars(price('monotributocheck'))}) con este mismo correo, se activa el portal para gestionar tu Monotributo todo el año.</p><a class="button" href="/servicios/monotributocheck">Calcular mi categoría</a><p class="small muted">¿Compraste con otro correo? Salí e ingresá con ese.</p></section>`,{canonical:'/mi-facturacion'});
     const cats=MONO_TABLE.categorias.map(c=>`<option value="${c.cat}">Categoría ${c.cat}</option>`).join('');
-    return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b></span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}
+    const until=portalUntil(user);
+    return show('Mi facturación',head+`<div class="account-bar"><span>Cuenta: <b>${esc(user.email)}</b>${until&&until!=='siempre'?` · Acceso hasta el ${esc(until.split('-').reverse().join('/'))}`:''}</span>${post('/salir','<button class="link">Salir</button>')}</div>${pending}
 <div id="portal" data-account="1"><div id="migrate" class="panel wide note-box" hidden><p id="migrate-txt"></p><button type="button" id="migrate-btn">Pasarlos a mi cuenta</button> <button type="button" class="link" id="migrate-skip">No, gracias</button></div>
 <section class="kpis">
   <div class="kpi"><span>Facturado en el período</span><b id="k-total">$ 0,00</b><small id="k-periodo"></small></div>
@@ -977,6 +1030,9 @@ if(process.argv[2]==='admin'){
   if(!/^[\w./-]+\.sqlite$/.test(target)||existsSync(target)) throw Error('Indicá un archivo .sqlite nuevo, sin espacios ni comillas.');
   db.exec(`VACUUM INTO '${target}'`);
   console.log(`Respaldo creado en ${target}. Guardá aparte la DATA_KEY: sin ella no se pueden leer los reclamos.`);
+} else if(process.argv[2]==='avisos'){
+  // Corre una vez los avisos del portal; con una fecha (AAAA-MM-DD) simula ese día (pruebas).
+  console.log(`${await runPortalAlerts(process.argv[3]?new Date(process.argv[3]+'T12:00:00Z'):new Date())} avisos enviados.`);
 } else if(process.argv[2]==='depurar'){
   if(!retention) throw Error('Configurá RETENTION_DAYS para depurar.');
   console.log(`${purge()} pedidos depurados.`);

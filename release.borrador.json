@@ -37,6 +37,12 @@
       "version": "1.1.0",
       "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
       "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
+    },
+    "mi-facturacion": {
+      "cents": 1990000,
+      "version": "1.0.0",
+      "approval": "",
+      "approvedBy": ""
     }
   }
 }

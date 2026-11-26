@@ -212,7 +212,7 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(markup,/href="\/servicios\/liquidacion-final"/);
   assert.match(markup,/href="\/servicios\/aguinaldo"[\s\S]*?|Gratis/);
   const sitemap=await (await get('/sitemap.xml')).text();
-  assert.equal(sitemap.match(/<loc>/g).length,44);
+  assert.equal(sitemap.match(/<loc>/g).length,47);
   assert.match(sitemap,/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/);
   const guias=await (await get('/guias')).text(); assert.match(guias,/Guías prácticas/); assert.match(guias,/como-darse-de-alta-en-el-monotributo/); assert.match(guias,/"@type":"ItemList"/);
   const catPage=await (await get('/guias/categorias-monotributo-cuota-mensual')).text(); assert.match(catPage,/class="table cat-table"/); assert.match(catPage,/"@type":"Article"/); assert.match(catPage,/"@type":"BreadcrumbList"/); assert.match(catPage,/Otras guías de Monotributo/);

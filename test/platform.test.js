@@ -25,7 +25,7 @@ const formValues={
   'ganancias-claro':{sueldo:'5.000.000',conyuge:'no',hijos:'0',hijos50:'si',alquiler:'0',domestico:'0',prepaga:'0'},
   'facturacheck':{cuit:'30-61234567-5',cae:'12345678912345',emision:'2026-01-01',vence:'2026-01-20'},
   'monotributocheck':{actividad:'servicios',categoria:'C',ingresos:'25000000',diciembre:'2500000',local:'no',superficie:'0',energia:'0',alquileres:'0',precio:'0',aportes:'general',billeteras:'si'},
-  'liquidacion-final':{motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'},
+  'liquidacion-final':{motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',variable:'no',tomadas:'5',preaviso:'no',tope:'no',cobrado:'no'},
   'aguinaldo':{sueldo:'1.200.000',ingreso:'2026-09-01',pago:'2026-12-31'},
   'importafacil':{mercaderia:'100',flete:'20',seguro:'5',cambio:'1000',cargos:'1000'},
   'mi-partida':{zona:'Córdoba',tipo:'nacimiento',anio:'1980'},
@@ -123,7 +123,7 @@ function signed(id,secret='secret'){
 }
 test('Liquidación final y aguinaldo: reforma 2026, tope del 67%, período de prueba y renuncia',()=>{
   const liq=getService('liquidacion-final');
-  const base={motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',tomadas:'5',preaviso:'no',tope:'no'};
+  const base={motivo:'sin_causa',ingreso:'2019-03-10',egreso:'2026-11-20',sueldo:'1.500.000',variable:'no',tomadas:'5',preaviso:'no',tope:'no',cobrado:'no'};
   const all=v=>evaluate(liq,{...base,...v}).lines.join('\n');
   // Tope de convenio: la base no baja del 67% del sueldo (1.005.000 x 8 = 8.040.000).
   assert.match(all({tope:'si',topeMonto:'500.000'}),/art\. 245\): \$\s8\.040\.000,00/);

@@ -16,8 +16,8 @@
     },
     "liquidacion-final": {
       "cents": 990000,
-      "version": "1.1.0",
-      "approval": "Aprobado por el titular en el chat el 25/11/2026: motores corregidos tras la auditoría",
+      "version": "1.2.0",
+      "approval": "Aprobado por el titular en el chat el 26/11/2026 (\"aprobado todo\", en respuesta al pedido de aprobar la versión 1.2.0 de Liquidación Final)",
       "approvedBy": "Felipe Ezequiel Vacchiani, CPN"
     },
     "creditocheck": {

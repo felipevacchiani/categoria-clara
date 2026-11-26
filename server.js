@@ -473,6 +473,8 @@ function summary(lines) {
 }
 const table=(columns,rows)=>`<div class="table"><table><thead><tr>${columns.map(label=>`<th scope="col">${esc(label)}</th>`).join('')}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(cell=>`<td>${cell}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 const authFields=`<label>Correo<input name="email" type="email" autocomplete="email" maxlength="254" required></label><label>Contraseña<input name="password" type="password" minlength="12" maxlength="128" required></label>`;
+// Formulario del servicio: el mismo en la ficha y en las guías (mismos campos, mismos eventos; "origen" registra la página de entrada).
+const serviceForm=(s,origen,defaults,info,cents)=>post(pathFor(s),`<input type="hidden" name="origen" value="${esc(origen)}">`+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(!isReclamo(s)?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`);
 async function route(req,res) {
   const url=new URL(req.url,origin);
   const path=url.pathname;
@@ -733,7 +735,7 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     const defaults={envio:today(),plazo:'10'};
     return show(info.title,`<div class="svc-head"><a href="/">Inicio</a><p class="eyebrow dark">${esc(s.name)}</p><h1>${esc(info.title)}</h1><p class="lead">${esc(info.tagline)}</p></div>
     <div class="svc-grid"><section class="panel"><h2>${!isReclamo(s)?'Cargá tus números':'Contanos qué pasó'}</h2><p class="muted">${!isReclamo(s)?'No te pedimos clave fiscal, DNI ni datos personales. Escribí los montos como siempre: 1.250.000,50.':'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.'}</p>
-    ${post(path,'<input type="hidden" name="origen" value="ficha">'+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?(!isReclamo(s)?'Ver resultado gratis':'Ver vista previa gratis'):'Ver resultado'}</button>`)}${s.slug==='monotributocheck'?'<p class="muted small">¿Ya sabés tu categoría y querés hacer el trámite? <a href="/guias/como-recategorizarse-en-arca-paso-a-paso">Mirá el instructivo paso a paso</a>.</p>':''}</section>
+    ${serviceForm(s,'ficha',defaults,info,cents)}${s.slug==='monotributocheck'?'<p class="muted small">¿Ya sabés tu categoría y querés hacer el trámite? <a href="/guias/como-recategorizarse-en-arca-paso-a-paso">Mirá el instructivo paso a paso</a>.</p>':''}</section>
     <aside class="panel aside"><h2>Qué recibís</h2>${checks(info.includes)}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves la vista previa gratis y pagás solo si querés el PDF.</p>`:''}${mock(s,info)}<p class="muted small">Fuente: <a href="${esc(sourceUrl)}">${esc(sourceName)}</a></p></aside></div>
     ${stepsHtml(info)}${faqHtml(info)}`,{canonical:path,docTitle:info.seoTitle,description:info.seoDescription||info.tagline,jsonld:[serviceLd(info.title,info.tagline,path,cents),faqLd(info)]});
   }
@@ -749,13 +751,18 @@ ${post('/cuenta/crear',`<label>Correo<input name="email" type="email" autocomple
     event('view_item',s.slug,undefined,landing.path);
     const defaults={...(landing.tipo?{tipo:landing.tipo}:{}),envio:today(),plazo:'10'};
     const isMono=s.slug==='monotributocheck';
-    const article=(landing.table==='categorias'?categoriasTable():'')+(landing.sections||[]).map(([h,ps])=>`<h2>${esc(h)}</h2>${ps.map(p=>`<p>${esc(p)}</p>`).join('')}`).join('');
+    // Guía → producto: botón tras la introducción, formulario después de la primera sección y barra fija en el celular.
+    const sec=([h,ps])=>`<h2>${esc(h)}</h2>${ps.map(p=>`<p>${esc(p)}</p>`).join('')}`;
+    const sections=landing.sections||[];
+    const articleTop=(landing.table==='categorias'?categoriasTable():'')+sections.slice(0,1).map(sec).join('');
+    const articleRest=sections.slice(1).map(sec).join('');
     const guideFaq=landing.faq?{faq:landing.faq}:info;
     const description=landing.description||landing.intro;
-    return show(landing.title,`<nav class="crumbs" aria-label="Migas"><a href="/">Inicio</a> › ${!isReclamo(s)?'<a href="/guias">Guías</a>':`<a href="${pathFor(s)}">${esc(info.title)}</a>`} › <span>${esc(landing.title)}</span></nav><div class="svc-head"><h1>${esc(landing.title)}</h1><p class="lead">${esc(landing.intro)}</p></div>${article?`<article class="guide">${article}</article>`:''}
-    <div class="svc-grid"><section class="panel"><h2>${caso?'Armá tu reclamo':'Calculá tu caso'}</h2><p class="muted">${caso?'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.':'No te pedimos clave fiscal ni datos personales.'}</p>
-    ${post(pathFor(s),`<input type="hidden" name="origen" value="${esc(landing.path)}">`+s.fields.map(f=>fieldHtml(f,defaults[f.key]??'',info.placeholders?.[f.key])).join('')+`<button name="action" value="preview">${cents?'Ver resultado gratis':'Ver resultado'}</button>`)}</section>
+    return show(landing.title,`<nav class="crumbs" aria-label="Migas"><a href="/">Inicio</a> › ${!isReclamo(s)?'<a href="/guias">Guías</a>':`<a href="${pathFor(s)}">${esc(info.title)}</a>`} › <span>${esc(landing.title)}</span></nav><div class="svc-head"><h1>${esc(landing.title)}</h1><p class="lead">${esc(landing.intro)}</p>${!caso?`<a class="button cta-top" href="#calcular">Calculá tu caso en 2 minutos</a>`:''}</div>${articleTop?`<article class="guide">${articleTop}</article>`:''}
+    <div class="svc-grid" id="calcular"><section class="panel"><h2>${caso?'Armá tu reclamo':'Calculá tu caso'}</h2><p class="muted">${caso?'No incluyas DNI ni datos de otras personas: tus datos personales los completás vos en la nota antes de enviarla.':'No te pedimos clave fiscal ni datos personales.'}</p>
+    ${serviceForm(s,landing.path,defaults,info,cents)}</section>
     <aside class="panel aside">${aside}${cents?`<p class="price">${ars(cents)}</p><p class="muted small">Ves el resultado gratis y pagás solo si querés el informe completo.</p>`:''}</aside></div>
+    ${articleRest?`<article class="guide">${articleRest}</article>`:''}${!caso?'<a class="sticky-cta" href="#calcular">Calculá tu caso en 2 minutos</a>':''}
     ${landing.steps?`<section class="block"><h2>Paso a paso en ARCA</h2><ol class="howto">${landing.steps.map(([t,d])=>`<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ol></section>`:''}${stepsHtml(info)}${faqHtml(guideFaq)}${relatedGuides(landing.path,s.slug)}`,{canonical:path,description,jsonld:[articleLd(landing.title,description,path),crumbsLd([['Inicio','/'],...(!isReclamo(s)?[['Guías','/guias']]:[]),[landing.title,path]]),serviceLd(landing.title,description,path,cents),faqLd(guideFaq)]});
   }
   if(method==='POST'&&path==='/eventos/inicio'){

@@ -208,6 +208,13 @@ test('Integración HTTP: sitio de Monotributo, compra sin cuenta, PDF por enlace
   assert.match(markup,/Sabelo en 2 minutos/);
   assert.match(markup,/href="\/servicios\/monotributocheck"/);
   assert.equal(markup.match(/href="\/guias\//g).length,37);
+  // Guías → producto: botón tras la introducción, formulario antes del resto del artículo y barra fija
+  const guia=await (await get('/guias/me-recategorizaron-de-oficio')).text();
+  assert.match(guia,/<a class="button cta-top" href="#calcular">Calculá tu caso en 2 minutos<\/a>/);
+  assert.match(guia,/<a class="sticky-cta" href="#calcular">/);
+  assert.match(guia,/name="origen" value="me-recategorizaron-de-oficio"/);
+  const secciones=[...guia.matchAll(/<article class="guide">/g)].length;
+  assert.ok(guia.indexOf('id="calcular"')<guia.lastIndexOf('<article class="guide">')||secciones<2,'el formulario va antes del resto de la guía');
   assert.doesNotMatch(markup,/CUIT|20-12345678-9/);
   assert.match(markup,/"@type":"FAQPage"/);
   assert.doesNotMatch(markup,/Reclamo a una|Mi cuenta|Servicio completo pendiente/);

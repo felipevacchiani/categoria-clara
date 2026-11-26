@@ -136,3 +136,11 @@ td form input{max-width:9rem}
 .trust-row li::before{content:"✓ ";color:#2f7d4f;font-weight:700}
 #comprar{scroll-margin-top:1rem}
 @media(min-width:900px){.cta-wrap{display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap}.cta-top{display:inline-block}.cta-wrap .trust-row{margin:0}}
+/* Guías: botón tras la introducción y barra fija en el celular que lleva al formulario */
+.svc-head .cta-top{margin-top:1rem}
+#calcular{scroll-margin-top:1rem}
+.sticky-cta{display:none}
+@media(max-width:700px){
+  .sticky-cta{display:block;position:fixed;left:.6rem;right:.6rem;bottom:.6rem;z-index:40;text-align:center;font-weight:700;padding:.85rem 1rem;border-radius:12px;background:#e8a33a;color:#16181d;text-decoration:none;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  body:has(.sticky-cta){padding-bottom:4.5rem}
+}

@@ -79,6 +79,6 @@ test('Liquidación: adicionales variables y comparación con lo cobrado', () => 
   assert.doesNotMatch(JSON.stringify(liquidacionTeaser(menos)), /2\.000\.000/);
   assert.match(lines({ cobrado: 'si', pagado: neto - 1000 })[0], /coincide/);
   assert.match(lines({ cobrado: 'si', pagado: neto + 2000000 })[0], /cobraste \$\s2\.000\.000,00 más/);
-  assert.match(liquidacionTeaser(lines({ cobrado: 'no' })).facts[1][1], /^9: /);
+  assert.match(liquidacionTeaser(lines({ cobrado: 'no' })).facts[1][1], /^9\. Cuáles son/);
   assert.throws(() => lines({ cobrado: 'si', pagado: 0 }), /total que te pagaron/);
 });

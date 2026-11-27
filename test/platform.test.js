@@ -143,11 +143,14 @@ test('Liquidación final y aguinaldo: reforma 2026, tope del 67%, período de pr
   assert.throws(()=>evaluate(liq,{...base,egreso:'2018-01-01'}),/posterior/);
   const teaser=liq.teaser(evaluate(liq,base).lines);
   assert.equal(teaser.facts[0][0],'Total estimado en mano');
-  assert.match(teaser.facts[0][1],/^\$ \d{2}\.█{3}\.█{3}$/); // solo los dos primeros dígitos
+  assert.equal(teaser.facts[0][1],'$ ██.███.███'); // total tapado, sin orden de magnitud
   assert.match(teaser.headline,/^Detectamos 9 conceptos/);
   assert.equal(teaser.cta,'Ver mi liquidación completa');
-  assert.match(teaser.facts[1][1],/^9: días trabajados del mes, .*indemnización por antigüedad$/);
-  assert.doesNotMatch(JSON.stringify(teaser),/,\d{2}/); // nunca centavos ni importes exactos
+  assert.match(teaser.facts[1][1],/^9\. Cuáles son/); // sin nombres de conceptos
+  assert.doesNotMatch(teaser.facts[1][1],/indemnización/);
+  assert.deepEqual(teaser.facts[2][0],'Muestra de tu informe (1 de 9)');
+  assert.match(teaser.facts[2][1],/^Días trabajados del mes: \$ [\d.]+,\d{2} \(/);
+  assert.equal((JSON.stringify(teaser).match(/,\d{2}/g)||[]).length,1); // un solo importe exacto: el de la muestra
   const ag=getService('aguinaldo');
   assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2026-12-31'}).lines[0],/\$\s415\.000,00 en mano \(\$\s500\.000,00/);
   assert.match(evaluate(ag,{sueldo:'1.000.000',ingreso:'2020-01-01',pago:'2027-06-30'}).lines.join(' '),/30\/06\/2027/);

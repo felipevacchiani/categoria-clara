@@ -197,28 +197,24 @@ export function evaluateLiquidacion(x) {
   return lines;
 }
 
-// Vista previa gratis: muestra el orden de magnitud del total (un rango) y qué conceptos te corresponden,
-// sin importes por concepto. El informe pago da el número exacto, el detalle y cómo verificar el recibo.
-// Monto parcialmente oculto: se ven los dos primeros dígitos (el orden de magnitud), el resto queda tapado.
-const oculto = n => {
-  let vistos = 0;
-  return '$ ' + Math.round(n).toLocaleString('es-AR').replace(/\d/g, d => (vistos++ < 2 ? d : '█'));
-};
+// Vista previa gratis: cuántos conceptos te corresponden y un concepto de muestra con su importe exacto,
+// para que se vea el nivel de detalle. El total queda tapado y sin dígitos: es lo que se paga.
+const oculto = () => '$ ██.███.███';
 export function liquidacionTeaser(lines) {
   const conceptos = lines.slice(0, lines.findIndex(l => l.startsWith('- Total bruto'))).filter(l => l.startsWith('- ') && /: \$/.test(l));
-  // Sin comparación: rango del total. Con comparación: solo el veredicto (el rango dejaría deducir la diferencia).
   const neto = Number((lines[0].match(/estimada es de \$\s?([\d.]+),(\d{2}) en mano/) || [])[1]?.replace(/\./g, ''));
-  const nombres = conceptos.map(l => l.slice(2, l.indexOf(':')).replace(/ \(.*$/, '').toLowerCase().replace(/\bsac\b/g, 'SAC'));
   const aFavor = /^Resultado: te habrían pagado/.test(lines[0]);
+  const muestra = conceptos[0] ? conceptos[0].slice(2).replace(/\.\s+(.*?)\.?$/, ' ($1)') : '';
   return {
     headline: aFavor ? `Detectamos una diferencia a tu favor en tu liquidación. Te corresponden ${conceptos.length} conceptos.` : `Detectamos ${conceptos.length} conceptos que te tienen que pagar.`,
     cta: 'Ver mi liquidación completa',
     facts: [
-      ...(neto > 0 ? [['Total estimado en mano', oculto(neto)]] : []),
+      ...(neto > 0 ? [['Total estimado en mano', oculto()]] : []),
       ...(aFavor ? [['Comparación con lo que cobraste', 'Hay una diferencia a tu favor']]
         : /^Resultado: cobraste/.test(lines[0]) ? [['Comparación con lo que cobraste', 'Cobraste más de lo estimado']]
         : /^Resultado: lo que cobraste/.test(lines[0]) ? [['Comparación con lo que cobraste', 'Coincide con lo que te corresponde']] : []),
-      ['Conceptos que te corresponden', `${conceptos.length}: ${nombres.join(', ')}`],
+      ['Conceptos que te corresponden', `${conceptos.length}. Cuáles son, cuánto vale cada uno y su base legal están en el informe.`],
+      ...(muestra ? [['Muestra de tu informe (1 de ' + conceptos.length + ')', muestra]] : []),
       ['Plazo de pago', '4 días hábiles desde el egreso']
     ],
     includes: [aFavor ? 'Cuánta plata te deben y en qué conceptos buscarla' : 'El total exacto a cobrar en mano y el bruto', 'Cada concepto con su importe y cómo se calcula, para controlarlo contra tu recibo', 'La base legal de cada concepto (Ley de Contrato de Trabajo y reforma 2026)', 'Los cambios de la reforma laboral 2026 aplicados a tu caso', 'Qué hacer antes de firmar el recibo y cómo reclamar si no te pagan']
